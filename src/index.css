@@ -1,0 +1,82 @@
+@import "tailwindcss";
+
+@layer base {
+  :root {
+    --font-heading: 'Lora', Georgia, serif;
+    --font-body: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  }
+
+  body {
+    font-family: var(--font-body);
+    color: #292524;
+    background-color: #FBF9F5;
+    transition: background-color 0.2s ease, color 0.2s ease;
+  }
+
+  .dark body {
+    color: #E6EDF3;
+    background-color: #0D1117;
+  }
+
+  h1, h2, h3, .font-heading {
+    font-family: var(--font-heading);
+  }
+}
+
+/* Dark mode theme overrides */
+.dark .bg-\[\#FBF9F5\] {
+  background-color: #0D1117 !important;
+}
+
+.dark .bg-\[\#FBF9F5\]\/95,
+.dark .bg-\[\#FBF9F5\]\/98 {
+  background-color: rgba(13, 17, 23, 0.95) !important;
+}
+
+.dark .bg-white {
+  background-color: #161B22 !important;
+  color: #E6EDF3;
+}
+
+.dark .bg-stone-50,
+.dark .bg-stone-50\/50,
+.dark .bg-stone-100 {
+  background-color: #21262D !important;
+}
+
+.dark .border-stone-200,
+.dark .border-stone-200\/80,
+.dark .border-stone-300,
+.dark .border-stone-100 {
+  border-color: #30363D !important;
+}
+
+.dark .text-stone-900,
+.dark .text-stone-800 {
+  color: #F0F6FC !important;
+}
+
+.dark .text-stone-700,
+.dark .text-stone-600 {
+  color: #C9D1D9 !important;
+}
+
+.dark .text-stone-500 {
+  color: #8B949E !important;
+}
+
+/* High accessibility focus indicators */
+:focus-visible {
+  outline: 3px solid #0f766e;
+  outline-offset: 3px;
+}
+
+/* Reduced motion preference respect */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

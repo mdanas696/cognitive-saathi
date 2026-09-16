@@ -69,6 +69,7 @@ import { CaregiverPinModal } from './components/auth/CaregiverPinModal';
 import { AddPatientModal } from './components/caregiver/AddPatientModal';
 import { LogoutConfirmModal } from './components/common/LogoutConfirmModal';
 import { Bot, Lock } from 'lucide-react';
+import { Analytics } from '@vercel/analytics/react';
 
 export default function App() {
   // Authentication & Initial Role Selection Gate
@@ -839,6 +840,9 @@ export default function App() {
         onConfirmLogout={handleConfirmLogout}
         userName={patient.preferredName || patient.fullName}
       />
+
+      {/* Vercel Web Analytics */}
+      <Analytics />
     </div>
   );
 }

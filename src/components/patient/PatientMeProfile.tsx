@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { PatientProfile, LanguageCode, TextScale } from '../../types';
 import { translations } from '../../lib/i18n';
+import { OfflineStore } from '../../lib/offlineStore';
 import { EditPatientProfileModal } from './EditPatientProfileModal';
 import { SelectOrAddCaregiverModal } from './SelectOrAddCaregiverModal';
 import { ElderAvatar } from '../common/ElderAvatar';
@@ -65,8 +66,34 @@ export const PatientMeProfile: React.FC<PatientMeProfileProps> = ({
   const [isSelectCaregiverOpen, setIsSelectCaregiverOpen] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
   const [copiedKey, setCopiedKey] = useState(false);
+  const [copiedPatientKey, setCopiedPatientKey] = useState(false);
+  const [isEditingPatientKey, setIsEditingPatientKey] = useState(false);
+  const [customPatientKeyInput, setCustomPatientKeyInput] = useState('');
+  const [patientKeyError, setPatientKeyError] = useState<string | null>(null);
+  const [patientKeySuccess, setPatientKeySuccess] = useState<string | null>(null);
 
   const hasCaregiver = Boolean(patient.caregiverName && patient.caregiverName !== 'Self' && patient.hasCaregiver !== false);
+
+  const handleSavePatientKey = () => {
+    setPatientKeyError(null);
+    setPatientKeySuccess(null);
+    const clean = customPatientKeyInput.trim().toUpperCase();
+    if (!clean || clean.length < 3) {
+      setPatientKeyError('Patient key must be at least 3 characters.');
+      return;
+    }
+    const res = OfflineStore.updatePatientKey(patient.id, clean);
+    if (!res.success) {
+      setPatientKeyError(res.error || 'Failed to update patient key.');
+      return;
+    }
+    if (res.patient) {
+      onUpdatePatient(res.patient);
+    }
+    setPatientKeySuccess(`Your Patient Key is now "${clean}"!`);
+    setIsEditingPatientKey(false);
+    setTimeout(() => setPatientKeySuccess(null), 3000);
+  };
 
   const handleCopyCaregiverKey = () => {
     const key = patient.linkedCaregiverKey || '';
@@ -74,6 +101,15 @@ export const PatientMeProfile: React.FC<PatientMeProfileProps> = ({
       navigator.clipboard.writeText(key);
       setCopiedKey(true);
       setTimeout(() => setCopiedKey(false), 2000);
+    }
+  };
+
+  const handleCopyPatientKey = () => {
+    const key = patient.patientKey || `PT-${patient.id.slice(0, 6).toUpperCase()}`;
+    if (navigator.clipboard) {
+      navigator.clipboard.writeText(key);
+      setCopiedPatientKey(true);
+      setTimeout(() => setCopiedPatientKey(false), 2000);
     }
   };
 
@@ -195,6 +231,101 @@ export const PatientMeProfile: React.FC<PatientMeProfileProps> = ({
           <span className="text-xs text-stone-600 font-medium block">
             Streak with Family
           </span>
+        </div>
+      </div>
+
+      {/* 2b. Patient's Unique Key Card (to share with Caregivers) */}
+      <div className="rounded-3xl bg-amber-50/90 dark:bg-amber-950/40 border-2 border-amber-300 dark:border-amber-700/80 p-6 shadow-xs space-y-3">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="px-2.5 py-0.5 rounded-md bg-amber-200 dark:bg-amber-900 text-amber-950 dark:text-amber-200 text-xs font-bold uppercase tracking-wider">
+                Patient Unique Key
+              </span>
+            </div>
+            <h3 className="text-lg font-bold font-serif-heading text-stone-900 dark:text-stone-100">
+              Your Personal Care Key
+            </h3>
+            <p className="text-xs sm:text-sm text-stone-600 dark:text-stone-300 max-w-lg leading-relaxed">
+              Share this key with your family member or caregiver so they can link your account to their Caregiver Dashboard. You can also set a custom key of your own choice.
+            </p>
+            <div className="pt-2">
+              {!isEditingPatientKey ? (
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="px-4 py-2 rounded-xl bg-white dark:bg-stone-900 border-2 border-amber-400 dark:border-amber-600 font-mono text-xl font-black tracking-widest text-amber-900 dark:text-amber-300 shadow-2xs">
+                    {patient.patientKey || `PT-${patient.id.slice(0, 6).toUpperCase()}`}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={handleCopyPatientKey}
+                    className="px-4 py-2.5 rounded-2xl bg-amber-500 hover:bg-amber-400 text-stone-950 text-xs font-bold transition flex items-center gap-2 shadow-xs active:scale-95 shrink-0 cursor-pointer"
+                  >
+                    {copiedPatientKey ? (
+                      <>
+                        <Check className="w-4 h-4 text-emerald-950" />
+                        <span>Copied to Clipboard!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-4 h-4" />
+                        <span>Copy Patient Key</span>
+                      </>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCustomPatientKeyInput(patient.patientKey || `PT-${patient.id.slice(0, 6).toUpperCase()}`);
+                      setIsEditingPatientKey(true);
+                      setPatientKeyError(null);
+                    }}
+                    className="px-3.5 py-2.5 rounded-2xl bg-white dark:bg-stone-800 hover:bg-amber-50 dark:hover:bg-stone-700 text-stone-800 dark:text-stone-200 border border-amber-300 dark:border-amber-700 text-xs font-bold transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
+                  >
+                    <Edit3 className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                    <span>Set / Edit My Key</span>
+                  </button>
+                </div>
+              ) : (
+                <div className="flex flex-wrap items-center gap-2 pt-1">
+                  <input
+                    type="text"
+                    value={customPatientKeyInput}
+                    onChange={(e) => setCustomPatientKeyInput(e.target.value.toUpperCase())}
+                    placeholder="e.g. PT-DAD72, AMMA-KEY"
+                    className="px-3 py-2 rounded-xl border-2 border-amber-500 font-mono text-xs font-bold bg-white dark:bg-stone-900 text-stone-900 dark:text-stone-100 uppercase"
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setCustomPatientKeyInput(`PT-${Math.floor(100000 + Math.random() * 900000)}`)
+                    }
+                    className="px-2.5 py-2 rounded-xl bg-amber-100 dark:bg-amber-900 text-amber-950 dark:text-amber-200 text-xs font-bold border border-amber-300"
+                  >
+                    🎲 Random
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSavePatientKey}
+                    className="px-3.5 py-2 rounded-xl bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold shadow-xs cursor-pointer"
+                  >
+                    Save Key
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsEditingPatientKey(false);
+                      setPatientKeyError(null);
+                    }}
+                    className="px-3 py-2 rounded-xl bg-stone-200 dark:bg-stone-700 hover:bg-stone-300 text-stone-800 dark:text-stone-200 text-xs font-bold cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
+              {patientKeyError && <p className="text-xs text-rose-600 font-bold mt-1.5">{patientKeyError}</p>}
+              {patientKeySuccess && <p className="text-xs text-emerald-600 font-bold mt-1.5">{patientKeySuccess}</p>}
+            </div>
+          </div>
         </div>
       </div>
 

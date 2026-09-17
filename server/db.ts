@@ -23,6 +23,7 @@ const INITIAL_PATIENTS: PatientProfile[] = [
     username: 'ramesh',
     password: 'password123',
     pin: '5678',
+    patientKey: 'PT-RAMESH72',
     linkedCaregiverKey: 'CG-CARE88',
     age: 72,
     region: 'Guwahati, Assam',
@@ -43,6 +44,7 @@ const INITIAL_PATIENTS: PatientProfile[] = [
     username: 'biren',
     password: 'password123',
     pin: '4321',
+    patientKey: 'PT-BIREN76',
     age: 76,
     region: 'Guwahati, Assam',
     state: 'Assam',
@@ -143,6 +145,7 @@ export class ServerDB {
 
     return db.patients.find((p) => {
       if (p.id.toLowerCase() === clean) return true;
+      if (p.patientKey && p.patientKey.toLowerCase() === clean) return true;
       if (p.username && p.username.toLowerCase() === clean) return true;
       if (p.fullName.toLowerCase() === clean) return true;
       if (p.phone) {
@@ -162,6 +165,7 @@ export class ServerDB {
 
     return db.caretakers.find((c) => {
       if (c.id.toLowerCase() === clean) return true;
+      if (c.caregiverKey && c.caregiverKey.toLowerCase() === clean) return true;
       if (c.username && c.username.toLowerCase() === clean) return true;
       if (c.fullName.toLowerCase() === clean) return true;
       if (c.phone) {
@@ -226,5 +230,96 @@ export class ServerDB {
 
     this.save(db);
     return caretaker;
+  }
+
+  static linkPatientToCaretaker(
+    caretakerId: string,
+    patientIdentifier: string
+  ): { success: boolean; error?: string; caretaker?: CaretakerProfile; patient?: PatientProfile } {
+    const db = this.ensureDbExists();
+    const caretaker = db.caretakers.find((c) => c.id === caretakerId);
+    if (!caretaker) return { success: false, error: 'Caregiver not found.' };
+
+    const patient = this.findPatient(patientIdentifier);
+    if (!patient) return { success: false, error: 'No patient found with that key, mobile number, or username.' };
+
+    if (!caretaker.assignedPatientIds.includes(patient.id)) {
+      caretaker.assignedPatientIds.push(patient.id);
+    }
+
+    patient.linkedCaregiverKey = caretaker.caregiverKey;
+    patient.caregiverName = `${caretaker.fullName} (${caretaker.relation || 'Caregiver'})`;
+    patient.caregiverPhone = caretaker.phone;
+    patient.hasCaregiver = true;
+
+    this.save(db);
+    return { success: true, caretaker, patient };
+  }
+
+  static linkCaregiverToPatient(
+    patientId: string,
+    caregiverKey: string
+  ): { success: boolean; error?: string; caretaker?: CaretakerProfile; patient?: PatientProfile } {
+    const db = this.ensureDbExists();
+    const patient = db.patients.find((p) => p.id === patientId);
+    if (!patient) return { success: false, error: 'Patient not found.' };
+
+    const keyClean = caregiverKey.trim().toUpperCase();
+    const caretaker = db.caretakers.find(
+      (c) => (c.caregiverKey || '').toUpperCase() === keyClean
+    );
+    if (!caretaker) return { success: false, error: 'No caregiver found with that Caregiver Key.' };
+
+    if (!caretaker.assignedPatientIds.includes(patient.id)) {
+      caretaker.assignedPatientIds.push(patient.id);
+    }
+
+    patient.linkedCaregiverKey = caretaker.caregiverKey;
+    patient.caregiverName = `${caretaker.fullName} (${caretaker.relation || 'Caregiver'})`;
+    patient.caregiverPhone = caretaker.phone;
+    patient.hasCaregiver = true;
+
+    this.save(db);
+    return { success: true, caretaker, patient };
+  }
+
+  static getMemories(patientId: string): MemoryMoment[] {
+    const db = this.ensureDbExists();
+    return db.memories[patientId] || [];
+  }
+
+  static addMemory(patientId: string, memory: MemoryMoment): MemoryMoment[] {
+    const db = this.ensureDbExists();
+    if (!db.memories[patientId]) {
+      db.memories[patientId] = [];
+    }
+    db.memories[patientId] = [memory, ...db.memories[patientId]];
+    this.save(db);
+    return db.memories[patientId];
+  }
+
+  static deleteMemory(patientId: string, memoryId: string): MemoryMoment[] {
+    const db = this.ensureDbExists();
+    if (!db.memories[patientId]) {
+      db.memories[patientId] = [];
+    }
+    db.memories[patientId] = db.memories[patientId].filter((m) => m.id !== memoryId);
+    this.save(db);
+    return db.memories[patientId];
+  }
+
+  static getSessions(patientId: string): GameSessionResult[] {
+    const db = this.ensureDbExists();
+    return db.sessions[patientId] || [];
+  }
+
+  static addSession(patientId: string, session: GameSessionResult): GameSessionResult[] {
+    const db = this.ensureDbExists();
+    if (!db.sessions[patientId]) {
+      db.sessions[patientId] = [];
+    }
+    db.sessions[patientId] = [session, ...db.sessions[patientId]];
+    this.save(db);
+    return db.sessions[patientId];
   }
 }

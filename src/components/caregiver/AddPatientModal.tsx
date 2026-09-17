@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { UserPlus, X, Heart, MapPin, Globe, Sparkles, Phone, ShieldCheck, User } from 'lucide-react';
+import { UserPlus, X, Heart, MapPin, Globe, Sparkles, Phone, ShieldCheck, User, KeyRound } from 'lucide-react';
 import { PatientProfile, LanguageCode, CaretakerProfile } from '../../types';
 import { ElderAvatar } from '../common/ElderAvatar';
 import { PhotoUploader } from '../common/PhotoUploader';
@@ -28,6 +28,7 @@ export const AddPatientModal: React.FC<AddPatientModalProps> = ({
   const [caregiverName, setCaregiverName] = useState(currentCaretaker?.fullName || 'Family Caregiver');
   const [caregiverPhone, setCaregiverPhone] = useState(currentCaretaker?.phone || '+91 94350 12345');
   const [selectedAvatar, setSelectedAvatar] = useState<string | undefined>(undefined);
+  const [patientKey, setPatientKey] = useState(`PT-${Math.floor(100000 + Math.random() * 900000)}`);
   const [notes, setNotes] = useState('Mild memory forgetfulness. Prefers morning routines with warm tea.');
   const [error, setError] = useState<string | null>(null);
 
@@ -45,10 +46,13 @@ export const AddPatientModal: React.FC<AddPatientModalProps> = ({
     }
 
     const newId = `patient-${Date.now()}`;
+    const cleanKey = (patientKey.trim() || `PT-${Date.now().toString().slice(-6)}`).toUpperCase();
+
     const newPatient: PatientProfile = {
       id: newId,
       fullName: fullName.trim(),
       preferredName: preferredName.trim() || fullName.trim().split(' ')[0],
+      patientKey: cleanKey,
       age: Number(age),
       region: `${city.trim() || state}, ${state}`,
       state,
@@ -56,6 +60,7 @@ export const AddPatientModal: React.FC<AddPatientModalProps> = ({
       phone: phone.trim(),
       caregiverName: caregiverName.trim(),
       caregiverPhone: caregiverPhone.trim(),
+      linkedCaregiverKey: currentCaretaker?.caregiverKey || '',
       avatarUrl: selectedAvatar || '',
       dailyStreak: 1,
       todayCompletedCount: 0,
@@ -255,6 +260,34 @@ export const AddPatientModal: React.FC<AddPatientModalProps> = ({
                 />
               </div>
             </div>
+          </div>
+
+          {/* Patient Key Setting */}
+          <div className="p-3.5 rounded-2xl bg-teal-50/70 border border-teal-200 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label htmlFor="patient-key-input" className="text-xs font-bold text-teal-950 flex items-center gap-1.5">
+                <KeyRound className="w-3.5 h-3.5 text-teal-700" />
+                <span>Patient Key (Custom or Generated)</span>
+              </label>
+              <button
+                type="button"
+                onClick={() => setPatientKey(`PT-${Math.floor(100000 + Math.random() * 900000)}`)}
+                className="text-[11px] text-teal-800 hover:text-teal-950 font-bold underline cursor-pointer"
+              >
+                🎲 Randomize
+              </button>
+            </div>
+            <input
+              id="patient-key-input"
+              type="text"
+              value={patientKey}
+              onChange={(e) => setPatientKey(e.target.value.toUpperCase())}
+              placeholder="e.g. PT-MOM72, DAD-KOKA"
+              className="w-full px-3 py-2 rounded-xl border border-teal-300 bg-white font-mono text-xs font-bold text-teal-950 uppercase"
+            />
+            <p className="text-[11px] text-stone-500">
+              You can give this patient whatever key you prefer. They can use this key to log in or link.
+            </p>
           </div>
 
           {/* Notes */}

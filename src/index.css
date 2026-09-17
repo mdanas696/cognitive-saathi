@@ -1,5 +1,7 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
   --color-teal-850: #0f4c47;
 }
@@ -8,6 +10,11 @@
   :root {
     --font-heading: 'Lora', Georgia, serif;
     --font-body: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    color-scheme: light;
+  }
+
+  html.dark {
+    color-scheme: dark;
   }
 
   body {
@@ -17,7 +24,7 @@
     transition: background-color 0.2s ease, color 0.2s ease;
   }
 
-  .dark body {
+  html.dark body {
     color: #E6EDF3;
     background-color: #0D1117;
   }
@@ -27,46 +34,15 @@
   }
 }
 
-/* Dark mode theme overrides */
-.dark .bg-\[\#FBF9F5\] {
+/* Fallback utility styling for standard neutral surfaces in dark mode without breaking components */
+.dark .bg-\[\#FBF9F5\],
+.dark .bg-\[\#FAF8F5\] {
   background-color: #0D1117 !important;
 }
 
 .dark .bg-\[\#FBF9F5\]\/95,
-.dark .bg-\[\#FBF9F5\]\/98 {
+.dark .bg-\[\#FAF8F5\]\/95 {
   background-color: rgba(13, 17, 23, 0.95) !important;
-}
-
-.dark .bg-white {
-  background-color: #161B22 !important;
-  color: #E6EDF3;
-}
-
-.dark .bg-stone-50,
-.dark .bg-stone-50\/50,
-.dark .bg-stone-100 {
-  background-color: #21262D !important;
-}
-
-.dark .border-stone-200,
-.dark .border-stone-200\/80,
-.dark .border-stone-300,
-.dark .border-stone-100 {
-  border-color: #30363D !important;
-}
-
-.dark .text-stone-900,
-.dark .text-stone-800 {
-  color: #F0F6FC !important;
-}
-
-.dark .text-stone-700,
-.dark .text-stone-600 {
-  color: #C9D1D9 !important;
-}
-
-.dark .text-stone-500 {
-  color: #8B949E !important;
 }
 
 /* High accessibility focus indicators */

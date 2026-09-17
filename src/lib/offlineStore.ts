@@ -8,6 +8,7 @@ export const DEFAULT_PATIENTS: PatientProfile[] = [
     username: 'ramesh',
     password: 'password123',
     pin: '5678',
+    patientKey: 'PT-RAMESH72',
     linkedCaregiverKey: 'CG-CARE88',
     age: 72,
     region: 'Guwahati, Assam',
@@ -28,6 +29,7 @@ export const DEFAULT_PATIENTS: PatientProfile[] = [
     username: 'biren',
     password: 'password123',
     pin: '4321',
+    patientKey: 'PT-BIREN76',
     age: 76,
     region: 'Guwahati, Assam',
     state: 'Assam',
@@ -367,6 +369,12 @@ const sanitizePatient = (p: PatientProfile): PatientProfile => {
   return {
     ...p,
     avatarUrl: stripStockAvatar(p.avatarUrl),
+    patientKey:
+      p.patientKey ||
+      `PT-${(p.username || p.preferredName || 'PATIENT')
+        .toUpperCase()
+        .replace(/[^A-Z0-9]/g, '')
+        .slice(0, 4)}${p.age || Math.floor(10 + Math.random() * 89)}`,
   };
 };
 
@@ -393,6 +401,15 @@ export class OfflineStore {
       code += chars.charAt(Math.floor(Math.random() * chars.length));
     }
     return `CG-${code}`;
+  }
+
+  static generatePatientKey(): string {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let code = '';
+    for (let i = 0; i < 6; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return `PT-${code}`;
   }
 
   /**
@@ -721,21 +738,63 @@ export class OfflineStore {
     return { success: true, caretaker: targetCaretaker, patient: targetPatient };
   }
 
-  // Alias for backward compatibility if called
+  // Caregiver links an existing patient by Patient Key (PT-XXXX), Mobile Phone, Username, or ID
   static linkCaregiverToPatientByKey(
     caretakerId: string,
-    key: string
+    keyOrIdentifier: string
   ): { success: boolean; error?: string; patient?: PatientProfile } {
     const allCaretakers = this.getCaretakers();
     const caretaker = allCaretakers.find((c) => c.id === caretakerId);
-    if (!caretaker) return { success: false, error: 'Caregiver not found.' };
+    if (!caretaker) return { success: false, error: 'Caregiver account not found.' };
+
+    const raw = keyOrIdentifier.trim();
+    const cleanUpper = raw.toUpperCase();
+    const cleanDigits = raw.replace(/\D/g, '');
+    const cleanLower = raw.toLowerCase();
 
     const allPatients = this.getPatients();
-    const patient = allPatients.find((p) => p.id === key || (p.linkedCaregiverKey || '').toUpperCase() === key.trim().toUpperCase());
+    const patient = allPatients.find((p) => {
+      if (p.patientKey && p.patientKey.toUpperCase() === cleanUpper) return true;
+      if (p.id === raw || p.id.toUpperCase() === cleanUpper) return true;
+      if (p.username && p.username.toLowerCase() === cleanLower) return true;
+      if (p.fullName && p.fullName.toLowerCase() === cleanLower) return true;
+      if (cleanDigits && p.phone) {
+        const pDigits = p.phone.replace(/\D/g, '');
+        if (pDigits === cleanDigits || pDigits.endsWith(cleanDigits) || cleanDigits.endsWith(pDigits)) return true;
+      }
+      return false;
+    });
+
     if (patient) {
-      return this.linkPatientToCaregiverByKey(patient.id, caretaker.caregiverKey);
+      const res = this.linkPatientToCaregiverByKey(patient.id, caretaker.caregiverKey);
+      // Fire-and-forget sync to server DB
+      fetch(`/api/caretakers/${caretaker.id}/link-patient`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier: patient.patientKey || patient.id }),
+      }).catch((e) => console.warn('Server link sync error:', e));
+
+      return { success: res.success, error: res.error, patient: res.patient };
     }
-    return { success: false, error: 'Invalid key.' };
+
+    // Try server lookup if not in local store
+    fetch(`/api/caretakers/${caretaker.id}/link-patient`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ identifier: raw }),
+    })
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.patient) {
+          OfflineStore.addPatient(data.patient);
+        }
+      })
+      .catch(() => {});
+
+    return {
+      success: false,
+      error: 'No patient found with that Patient Key (PT-XXXX), mobile number, or username.',
+    };
   }
 
   static unlinkCaregiver(patientId: string): void {
@@ -753,6 +812,94 @@ export class OfflineStore {
     patient.caregiverPhone = '';
     patient.linkedCaregiverKey = undefined;
     this.savePatient(patient);
+  }
+
+  // Update Caregiver Key (customized by Caregiver)
+  static updateCaregiverKey(
+    caretakerId: string,
+    newKey: string
+  ): { success: boolean; error?: string; caretaker?: CaretakerProfile } {
+    const cleanKey = newKey.trim().toUpperCase();
+    if (!cleanKey || cleanKey.length < 3) {
+      return { success: false, error: 'Caregiver Key must be at least 3 characters long.' };
+    }
+    const allCaretakers = this.getCaretakers();
+    const target = allCaretakers.find((c) => c.id === caretakerId);
+    if (!target) return { success: false, error: 'Caregiver account not found.' };
+
+    const duplicate = allCaretakers.find(
+      (c) => c.id !== caretakerId && (c.caregiverKey || '').toUpperCase() === cleanKey
+    );
+    if (duplicate) {
+      return {
+        success: false,
+        error: `Key "${cleanKey}" is already in use by another caregiver. Please choose a different key.`,
+      };
+    }
+
+    const oldKey = target.caregiverKey;
+    target.caregiverKey = cleanKey;
+    this.addCaretaker(target);
+
+    // Update patients linked to old key
+    if (oldKey) {
+      const allPatients = this.getPatients();
+      let updatedAny = false;
+      allPatients.forEach((p) => {
+        if ((p.linkedCaregiverKey || '').toUpperCase() === oldKey.toUpperCase()) {
+          p.linkedCaregiverKey = cleanKey;
+          updatedAny = true;
+        }
+      });
+      if (updatedAny) {
+        this.savePatients(allPatients);
+      }
+    }
+
+    // Sync to server database
+    fetch(`/api/caretakers/${caretakerId}/key`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ caregiverKey: cleanKey }),
+    }).catch((e) => console.warn('Server sync error for caregiver key:', e));
+
+    return { success: true, caretaker: target };
+  }
+
+  // Update Patient Key (customized by Patient or Caregiver)
+  static updatePatientKey(
+    patientId: string,
+    newKey: string
+  ): { success: boolean; error?: string; patient?: PatientProfile } {
+    const cleanKey = newKey.trim().toUpperCase();
+    if (!cleanKey || cleanKey.length < 3) {
+      return { success: false, error: 'Patient Key must be at least 3 characters long.' };
+    }
+    const allPatients = this.getPatients();
+    const target = allPatients.find((p) => p.id === patientId);
+    if (!target) return { success: false, error: 'Patient account not found.' };
+
+    const duplicate = allPatients.find(
+      (p) => p.id !== patientId && (p.patientKey || '').toUpperCase() === cleanKey
+    );
+    if (duplicate) {
+      return {
+        success: false,
+        error: `Key "${cleanKey}" is already in use by another patient. Please choose a different key.`,
+      };
+    }
+
+    target.patientKey = cleanKey;
+    this.savePatient(target);
+
+    // Sync to server database
+    fetch(`/api/patients/${patientId}/key`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ patientKey: cleanKey }),
+    }).catch((e) => console.warn('Server sync error for patient key:', e));
+
+    return { success: true, patient: target };
   }
 
   static resetPatientPassword(
@@ -885,16 +1032,30 @@ export class OfflineStore {
   }
 
   static addMemory(memory: MemoryMoment, patientId?: string): MemoryMoment[] {
-    const list = this.getMemories(patientId);
-    const updated = [memory, ...list];
-    this.saveMemories(updated, patientId);
+    const pId = patientId || this.getActivePatientId();
+    const list = this.getMemories(pId);
+    const updated = [{ ...memory, patientId: pId }, ...list];
+    this.saveMemories(updated, pId);
+    if (pId) {
+      fetch(`/api/memories/${pId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...memory, patientId: pId }),
+      }).catch((e) => console.warn('Sync memory error:', e));
+    }
     return updated;
   }
 
   static deleteMemory(id: string, patientId?: string): MemoryMoment[] {
-    const list = this.getMemories(patientId);
+    const pId = patientId || this.getActivePatientId();
+    const list = this.getMemories(pId);
     const updated = list.filter((m) => m.id !== id);
-    this.saveMemories(updated, patientId);
+    this.saveMemories(updated, pId);
+    if (pId) {
+      fetch(`/api/memories/${pId}/${id}`, {
+        method: 'DELETE',
+      }).catch((e) => console.warn('Delete memory error:', e));
+    }
     return updated;
   }
 
@@ -917,6 +1078,14 @@ export class OfflineStore {
       const sessions = this.getSessions(pId);
       const updated = [session, ...sessions];
       localStorage.setItem(`${STORAGE_KEYS.SESSIONS}_${pId}`, JSON.stringify(updated));
+
+      if (pId) {
+        fetch(`/api/sessions/${pId}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(session),
+        }).catch((e) => console.warn('Session sync error:', e));
+      }
 
       // Also enqueue in offline sync queue
       this.enqueueSyncEvent('GAME_COMPLETED', {

@@ -39,13 +39,27 @@ export const CaregiverReports: React.FC<CaregiverReportsProps> = ({
 
   // Load cached AI report or generate default
   useEffect(() => {
+    if (!patient?.id) return;
     const cached = OfflineStore.getAiReport(patient.id);
     if (cached) {
       setReport(cached);
-    } else {
+    } else if (sessions.length > 0) {
       generateAiReport();
     }
-  }, [patient.id]);
+  }, [patient?.id, sessions.length]);
+
+  // Real-time automatic synchronization (within 30 seconds)
+  useEffect(() => {
+    if (!patient?.id) return;
+    const interval = setInterval(() => {
+      const freshSessions = OfflineStore.getSessions(patient.id);
+      if (freshSessions.length > sessions.length) {
+        generateAiReport();
+      }
+    }, 10000); // Poll every 10 seconds to ensure updates appear well within 30 seconds
+
+    return () => clearInterval(interval);
+  }, [patient?.id, sessions.length]);
 
   const generateAiReport = async () => {
     setIsGenerating(true);
@@ -82,6 +96,22 @@ export const CaregiverReports: React.FC<CaregiverReportsProps> = ({
   const handlePrint = () => {
     window.print();
   };
+
+  const hasValidPatient = Boolean(patient && patient.id && patient.fullName && patient.fullName.trim() !== '');
+
+  if (!hasValidPatient) {
+    return (
+      <div className="bg-white rounded-3xl border border-stone-200 p-8 sm:p-12 text-center shadow-xs space-y-4 max-w-lg mx-auto my-8 animate-fadeIn">
+        <div className="w-14 h-14 rounded-2xl bg-teal-50 text-teal-800 flex items-center justify-center mx-auto border border-teal-200">
+          <Activity className="w-7 h-7 text-teal-800" />
+        </div>
+        <h3 className="font-bold text-stone-900 text-lg font-serif-heading">No Patient Linked Yet</h3>
+        <p className="text-xs sm:text-sm text-stone-600 leading-relaxed">
+          Link or register a patient under your care to view automated clinical reports and cognitive evaluation summaries.
+        </p>
+      </div>
+    );
+  }
 
   const completedReminders = reminders.filter((r) => r.completedToday).length;
   const completedRoutine = routine.filter((r) => r.completed).length;
@@ -124,8 +154,24 @@ export const CaregiverReports: React.FC<CaregiverReportsProps> = ({
         </div>
       </div>
 
-      {/* Main Printable Document Sheet */}
-      <div className="p-6 sm:p-10 rounded-3xl bg-white border border-stone-200 shadow-sm space-y-7">
+      {/* Empty State when no sessions logged yet */}
+      {sessions.length === 0 ? (
+        <div className="p-8 sm:p-12 rounded-3xl bg-white border border-dashed border-stone-300 text-center space-y-4 shadow-2xs">
+          <div className="w-14 h-14 rounded-2xl bg-teal-50 text-teal-800 flex items-center justify-center mx-auto">
+            <FileText className="w-7 h-7" />
+          </div>
+          <div className="max-w-md mx-auto space-y-1.5">
+            <h3 className="text-xl font-bold font-serif-heading text-stone-900">
+              No Patient Activities Logged Yet Today
+            </h3>
+            <p className="text-xs text-stone-500 leading-relaxed">
+              When {patient?.preferredName || patient?.fullName || 'your patient'} completes an exercise, daily routine check-in, or memory reflection, real-time clinical evaluations, cognitive domains, and trajectory analytics will appear here automatically within 30 seconds.
+            </p>
+          </div>
+        </div>
+      ) : (
+        /* Main Printable Document Sheet */
+        <div className="p-6 sm:p-10 rounded-3xl bg-white border border-stone-200 shadow-sm space-y-7">
         {/* Document Header */}
         <div className="flex items-start justify-between border-b border-stone-200 pb-6">
           <div>
@@ -326,6 +372,7 @@ export const CaregiverReports: React.FC<CaregiverReportsProps> = ({
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 };

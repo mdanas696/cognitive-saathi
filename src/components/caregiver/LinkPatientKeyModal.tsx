@@ -16,7 +16,7 @@ export const LinkPatientKeyModal: React.FC<LinkPatientKeyModalProps> = ({
   caretakerId,
   onPatientLinked,
 }) => {
-  const [caregiverKey, setCaregiverKey] = useState('');
+  const [patientIdentifier, setPatientIdentifier] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   if (!isOpen) return null;
@@ -25,17 +25,17 @@ export const LinkPatientKeyModal: React.FC<LinkPatientKeyModalProps> = ({
     e.preventDefault();
     setError(null);
 
-    const trimmedKey = caregiverKey.trim().toUpperCase();
-    if (!trimmedKey) {
-      setError('Please enter the patient’s Caregiver Key.');
+    const trimmed = patientIdentifier.trim();
+    if (!trimmed) {
+      setError('Please enter the Patient Key, Mobile Number, or Username.');
       return;
     }
 
     const currentCaretakerId = caretakerId || OfflineStore.getActiveCaretakerId() || 'caretaker-1';
-    const result = OfflineStore.linkCaregiverToPatientByKey(currentCaretakerId, trimmedKey);
+    const result = OfflineStore.linkCaregiverToPatientByKey(currentCaretakerId, trimmed);
 
     if (!result.success || !result.patient) {
-      setError(result.error || 'No patient found with that Caregiver Key. Please double check with the elder.');
+      setError(result.error || 'No patient found with that key, mobile number, or username.');
       return;
     }
 
@@ -59,10 +59,10 @@ export const LinkPatientKeyModal: React.FC<LinkPatientKeyModalProps> = ({
             </div>
             <div>
               <span className="text-[11px] font-bold uppercase tracking-wider text-teal-800 dark:text-teal-300 bg-teal-50 dark:bg-teal-950/60 px-2.5 py-0.5 rounded-md border border-teal-200 dark:border-teal-800">
-                Secure Linking
+                Patient Linking
               </span>
               <h2 id="link-patient-key-title" className="text-xl font-bold text-stone-900 dark:text-stone-100 font-serif-heading">
-                Link Patient by Key
+                Link Existing Patient
               </h2>
             </div>
           </div>
@@ -78,7 +78,7 @@ export const LinkPatientKeyModal: React.FC<LinkPatientKeyModalProps> = ({
         </div>
 
         <p className="text-xs text-stone-600 dark:text-stone-300 leading-relaxed">
-          Enter the unique Caregiver Key for the patient (e.g. CG-CARE88) to link securely:
+          Enter the patient’s <strong>Patient Key (e.g. PT-XXXX)</strong>, <strong>Mobile Number</strong>, or <strong>Username</strong> to instantly connect their profile to your caregiver dashboard:
         </p>
 
         {error && (
@@ -91,16 +91,16 @@ export const LinkPatientKeyModal: React.FC<LinkPatientKeyModalProps> = ({
         <form onSubmit={handleLink} className="space-y-4">
           <div className="space-y-1.5">
             <label htmlFor="patient-key-input" className="text-xs font-bold text-stone-700 dark:text-stone-300 block">
-              Caregiver Key:
+              Patient Key, Mobile Number, or Username:
             </label>
             <input
               id="patient-key-input"
               type="text"
               required
-              value={caregiverKey}
-              onChange={(e) => setCaregiverKey(e.target.value.toUpperCase())}
-              placeholder="e.g. CG-CARE88"
-              className="w-full p-3 rounded-2xl border border-stone-300 dark:border-stone-600 font-mono font-bold tracking-widest text-base text-stone-900 dark:text-stone-100 uppercase focus:outline-teal-800 bg-stone-50 dark:bg-[#121820]"
+              value={patientIdentifier}
+              onChange={(e) => setPatientIdentifier(e.target.value)}
+              placeholder="e.g. PT-RAME68 or 9876543210"
+              className="w-full p-3 rounded-2xl border border-stone-300 dark:border-stone-600 font-mono font-bold tracking-wider text-base text-stone-900 dark:text-stone-100 uppercase focus:outline-teal-800 bg-stone-50 dark:bg-[#121820]"
             />
           </div>
 
@@ -116,7 +116,7 @@ export const LinkPatientKeyModal: React.FC<LinkPatientKeyModalProps> = ({
               type="submit"
               className="flex-2 py-3 px-4 rounded-2xl bg-teal-800 hover:bg-teal-900 text-white font-bold text-xs transition flex items-center justify-center gap-2 shadow-xs"
             >
-              <span>Link Patient</span>
+              <span>Link Patient Now</span>
               <ArrowRight className="w-4 h-4 text-amber-300" />
             </button>
           </div>

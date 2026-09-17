@@ -227,6 +227,22 @@ export const CaretakerRoutineManager: React.FC<CaretakerRoutineManagerProps> = (
     setAiSuggestions((prev) => prev.filter((s) => s.title !== suggestion.title));
   };
 
+  const hasValidPatient = Boolean(patient && patient.id && patient.fullName && patient.fullName.trim() !== '');
+
+  if (!hasValidPatient) {
+    return (
+      <div className="bg-white rounded-3xl border border-stone-200 p-8 text-center shadow-xs space-y-4 max-w-lg mx-auto">
+        <div className="w-14 h-14 rounded-2xl bg-teal-50 text-teal-800 flex items-center justify-center mx-auto border border-teal-200">
+          <Calendar className="w-7 h-7 text-teal-800" />
+        </div>
+        <h3 className="font-bold text-stone-900 text-lg font-serif-heading">No Patient Linked Yet</h3>
+        <p className="text-xs sm:text-sm text-stone-600 leading-relaxed">
+          Link or register a patient under your care to configure and schedule their daily routine tasks.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="bg-white rounded-3xl border border-stone-200 p-6 shadow-xs space-y-6">
       {/* Header with actions */}

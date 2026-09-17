@@ -69,11 +69,13 @@ export const CaregiverMemoriesManager: React.FC<CaregiverMemoriesManagerProps> =
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [playingMemoryId, setPlayingMemoryId] = useState<string | null>(null);
 
+  const hasValidPatient = Boolean(patient && patient.id && patient.fullName && patient.fullName.trim() !== '');
+
   // Form State for Adding Memory
   const [title, setTitle] = useState('');
   const [category, setCategory] = useState('Family');
   const [dateLabel, setDateLabel] = useState('');
-  const [region, setRegion] = useState(patient.region || 'Assam');
+  const [region, setRegion] = useState(patient?.region || 'Assam');
   const [imageUrl, setImageUrl] = useState(PRESET_IMAGE_TEMPLATES[0].url);
   const [imageAlt, setImageAlt] = useState(PRESET_IMAGE_TEMPLATES[0].alt);
   const [story, setStory] = useState('');
@@ -82,6 +84,20 @@ export const CaregiverMemoriesManager: React.FC<CaregiverMemoriesManagerProps> =
   const [option1, setOption1] = useState('The happy family gathering');
   const [option2, setOption2] = useState('The delicious home-cooked sweets');
   const [option3, setOption3] = useState('The peaceful afternoon breeze');
+
+  if (!hasValidPatient) {
+    return (
+      <div className="bg-white rounded-3xl border border-stone-200 p-8 sm:p-12 text-center shadow-xs space-y-4 max-w-lg mx-auto my-8 animate-fadeIn">
+        <div className="w-14 h-14 rounded-2xl bg-teal-50 text-teal-800 flex items-center justify-center mx-auto border border-teal-200">
+          <Heart className="w-7 h-7 text-teal-800" />
+        </div>
+        <h3 className="font-bold text-stone-900 text-lg font-serif-heading">No Patient Linked Yet</h3>
+        <p className="text-xs sm:text-sm text-stone-600 leading-relaxed">
+          Link or register a patient under your care to create personalized photo reminiscence moments and nostalgic audio stories.
+        </p>
+      </div>
+    );
+  }
 
   const categories = ['All', 'Family', 'Festival', 'Place', 'Tradition'];
 

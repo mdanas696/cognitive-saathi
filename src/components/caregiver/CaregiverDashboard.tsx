@@ -21,6 +21,9 @@ import {
   X,
   KeyRound,
   Copy,
+  Edit3,
+  Check,
+  User,
 } from 'lucide-react';
 import { LinkPatientKeyModal } from './LinkPatientKeyModal';
 import {
@@ -36,6 +39,7 @@ import {
 } from 'recharts';
 import { PatientProfile, CaretakerProfile, ReminderItem, GameSessionResult, RoutineTask, LanguageCode } from '../../types';
 import { translations } from '../../lib/i18n';
+import { OfflineStore } from '../../lib/offlineStore';
 import { CaretakerRoutineManager } from './CaretakerRoutineManager';
 import { ElderAvatar } from '../common/ElderAvatar';
 
@@ -52,6 +56,7 @@ interface CaregiverDashboardProps {
   onNavigateTab: (tab: string) => void;
   caretaker?: CaretakerProfile | null;
   onDeletePatient?: (id: string) => void;
+  onUpdateCaregiverKey?: (newKey: string) => void;
 }
 
 export const CaregiverDashboard: React.FC<CaregiverDashboardProps> = ({
@@ -67,16 +72,41 @@ export const CaregiverDashboard: React.FC<CaregiverDashboardProps> = ({
   onNavigateTab,
   caretaker,
   onDeletePatient,
+  onUpdateCaregiverKey,
 }) => {
   const t = translations[lang];
   const [patientToDelete, setPatientToDelete] = useState<PatientProfile | null>(null);
   const [isLinkKeyModalOpen, setIsLinkKeyModalOpen] = useState(false);
   const [copiedKey, setCopiedKey] = useState(false);
+  const [isEditingKey, setIsEditingKey] = useState(false);
+  const [customKeyInput, setCustomKeyInput] = useState('');
+  const [keyError, setKeyError] = useState<string | null>(null);
+  const [keySuccess, setKeySuccess] = useState<string | null>(null);
 
   // AI Co-Pilot state for caregiver
   const [coPilotQuestion, setCoPilotQuestion] = useState('');
   const [coPilotResponse, setCoPilotResponse] = useState<string | null>(null);
   const [isCoPilotLoading, setIsCoPilotLoading] = useState(false);
+
+  const handleSaveCaregiverKey = () => {
+    setKeyError(null);
+    setKeySuccess(null);
+    const clean = customKeyInput.trim().toUpperCase();
+    if (!clean || clean.length < 3) {
+      setKeyError('Caregiver key must be at least 3 characters.');
+      return;
+    }
+    if (!caretaker?.id) return;
+    const res = OfflineStore.updateCaregiverKey(caretaker.id, clean);
+    if (!res.success) {
+      setKeyError(res.error || 'Failed to update key.');
+      return;
+    }
+    onUpdateCaregiverKey?.(clean);
+    setKeySuccess(`Your Caregiver Key is now "${clean}"!`);
+    setIsEditingKey(false);
+    setTimeout(() => setKeySuccess(null), 3000);
+  };
 
   const handleAskCoPilot = async (customPrompt?: string) => {
     const q = (customPrompt || coPilotQuestion).trim();
@@ -156,55 +186,170 @@ export const CaregiverDashboard: React.FC<CaregiverDashboardProps> = ({
               {t.caregiverOverviewSubtitle}
             </p>
 
-            {/* Caregiver Unique Key badge */}
-            <div className="flex flex-wrap items-center gap-2.5 pt-2">
-              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-teal-800 border border-teal-600/70 text-amber-300 font-mono text-xs font-bold shadow-inner">
-                <KeyRound className="w-4 h-4 text-amber-400 shrink-0" />
-                <span>Your Caregiver Key: {caretaker?.caregiverKey || 'CG-CARE88'}</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  navigator.clipboard.writeText(caretaker?.caregiverKey || 'CG-CARE88');
-                  setCopiedKey(true);
-                  setTimeout(() => setCopiedKey(false), 2000);
-                }}
-                className="px-3 py-1.5 rounded-xl bg-teal-700/80 hover:bg-teal-600 text-white text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
-              >
-                {copiedKey ? (
-                  <>
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300" />
-                    <span>Copied!</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-3.5 h-3.5 text-teal-200" />
-                    <span>Copy Key for Patient</span>
-                  </>
-                )}
-              </button>
-              <span className="text-[11px] text-teal-200/90 hidden sm:inline">
-                Give this key to your patient so they can connect with you.
-              </span>
+            {/* Caregiver Unique Key badge & Manual Key Setter */}
+            <div className="space-y-2 pt-2">
+              {!isEditingKey ? (
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-teal-800 border border-teal-600/70 text-amber-300 font-mono text-xs font-bold shadow-inner">
+                    <KeyRound className="w-4 h-4 text-amber-400 shrink-0" />
+                    <span>Your Caregiver Key: {caretaker?.caregiverKey || 'CG-CARE88'}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      navigator.clipboard.writeText(caretaker?.caregiverKey || 'CG-CARE88');
+                      setCopiedKey(true);
+                      setTimeout(() => setCopiedKey(false), 2000);
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-teal-700/80 hover:bg-teal-600 text-white text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  >
+                    {copiedKey ? (
+                      <>
+                        <Check className="w-3.5 h-3.5 text-emerald-300" />
+                        <span>Copied!</span>
+                      </>
+                    ) : (
+                      <>
+                        <Copy className="w-3.5 h-3.5 text-teal-200" />
+                        <span>Copy Key</span>
+                      </>
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCustomKeyInput(caretaker?.caregiverKey || 'CG-CARE88');
+                      setIsEditingKey(true);
+                      setKeyError(null);
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-amber-950 text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  >
+                    <Edit3 className="w-3.5 h-3.5 text-amber-900" />
+                    <span>Set / Edit My Key</span>
+                  </button>
+                  <button
+                    type="button"
+                    id="dashboard-goto-me-btn"
+                    onClick={() => onNavigateTab('me')}
+                    className="px-3 py-1.5 rounded-xl bg-teal-800 hover:bg-teal-700 text-teal-100 text-xs font-bold transition flex items-center gap-1.5 border border-teal-500/80 cursor-pointer shadow-xs"
+                  >
+                    <User className="w-3.5 h-3.5 text-teal-300" />
+                    <span>Go to Me Tab</span>
+                  </button>
+                  <span className="text-[11px] text-teal-200/90 hidden sm:inline">
+                    You or your patient can set your own personalized keys anytime.
+                  </span>
+                </div>
+              ) : (
+                <div className="flex flex-wrap items-center gap-2 p-3 rounded-2xl bg-teal-800/95 border border-teal-600 shadow-md">
+                  <span className="text-xs font-bold text-amber-300">Set Custom Key:</span>
+                  <input
+                    type="text"
+                    value={customKeyInput}
+                    onChange={(e) => setCustomKeyInput(e.target.value.toUpperCase())}
+                    placeholder="e.g. ALICARE, CG-MOM"
+                    className="px-3 py-1.5 rounded-xl border border-teal-400 font-mono text-xs font-bold bg-white text-stone-900 uppercase"
+                  />
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setCustomKeyInput(`CG-${Math.random().toString(36).substring(2, 8).toUpperCase()}`)
+                    }
+                    className="px-2.5 py-1.5 rounded-xl bg-teal-700 hover:bg-teal-600 text-teal-100 text-xs font-bold border border-teal-500"
+                  >
+                    🎲 Random
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveCaregiverKey}
+                    className="px-3 py-1.5 rounded-xl bg-amber-400 hover:bg-amber-300 text-amber-950 text-xs font-bold shadow-xs cursor-pointer"
+                  >
+                    Save Key
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsEditingKey(false);
+                      setKeyError(null);
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-teal-900 hover:bg-teal-950 text-teal-200 text-xs font-bold cursor-pointer"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              )}
+              {keyError && <p className="text-xs text-rose-300 font-bold">{keyError}</p>}
+              {keySuccess && <p className="text-xs text-emerald-300 font-bold">{keySuccess}</p>}
             </div>
           </div>
 
-          <div className="bg-teal-800/90 border border-teal-700 p-4 sm:p-5 rounded-2xl flex items-center gap-4 shrink-0 shadow-xs">
-            <ElderAvatar
-              name={patient.preferredName || patient.fullName}
-              avatarUrl={patient.avatarUrl}
-              size="lg"
-              className="border-2 border-amber-300 shadow-2xs shrink-0"
-            />
-            <div>
-              <span className="text-xs uppercase text-teal-300 font-semibold block">Active Patient</span>
-              <h3 className="text-base sm:text-lg font-bold text-white">{patient.fullName}, {patient.age}</h3>
-              <p className="text-xs text-teal-200">{patient.preferredName ? `(${patient.preferredName}) • ` : ''}{patient.region}</p>
+          {patient && patient.fullName ? (
+            <div className="bg-teal-800/90 border border-teal-700 p-4 sm:p-5 rounded-2xl flex items-center gap-4 shrink-0 shadow-xs">
+              <ElderAvatar
+                name={patient.preferredName || patient.fullName}
+                avatarUrl={patient.avatarUrl}
+                size="lg"
+                className="border-2 border-amber-300 shadow-2xs shrink-0"
+              />
+              <div>
+                <span className="text-xs uppercase text-teal-300 font-semibold block">Active Patient</span>
+                <h3 className="text-base sm:text-lg font-bold text-white">{patient.fullName}, {patient.age}</h3>
+                <p className="text-xs text-teal-200">{patient.preferredName ? `(${patient.preferredName}) • ` : ''}{patient.region}</p>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="bg-teal-800/90 border border-teal-700 p-4 sm:p-5 rounded-2xl flex items-center gap-3 shrink-0 shadow-xs">
+              <div className="w-12 h-12 rounded-2xl bg-teal-700 flex items-center justify-center text-amber-300 shrink-0">
+                <Users className="w-6 h-6" />
+              </div>
+              <div>
+                <span className="text-xs uppercase text-teal-300 font-semibold block">Caregiver Space</span>
+                <h3 className="text-base sm:text-lg font-bold text-white">No Active Patient</h3>
+                <p className="text-xs text-teal-200">Link or register a patient</p>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
+      {/* Clean Slate when no patients exist under care */}
+      {(!patient || !patient.fullName || !allPatients || allPatients.length === 0) ? (
+        <div className="bg-white dark:bg-[#1A222C] rounded-3xl border-2 border-dashed border-stone-300 dark:border-stone-700 p-8 sm:p-12 text-center space-y-6 shadow-xs">
+          <div className="w-16 h-16 rounded-3xl bg-teal-50 dark:bg-teal-950/60 text-teal-800 dark:text-teal-300 flex items-center justify-center mx-auto shadow-xs">
+            <Users className="w-8 h-8" />
+          </div>
+          <div className="max-w-md mx-auto space-y-2">
+            <h3 className="text-2xl font-bold font-serif-heading text-stone-900 dark:text-stone-100">
+              Fresh Caregiver Space
+            </h3>
+            <p className="text-xs sm:text-sm text-stone-600 dark:text-stone-300 leading-relaxed">
+              You have a fresh, clean slate with zero pre-loaded patients or reports. Connect an existing patient using their unique <strong>Patient Key</strong> (or phone number), or register a new patient to begin monitoring cognitive routines and brain exercises.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap items-center justify-center gap-3 pt-2">
+            <button
+              type="button"
+              onClick={() => setIsLinkKeyModalOpen(true)}
+              className="px-5 py-3 rounded-2xl bg-teal-800 hover:bg-teal-900 text-white font-bold text-xs sm:text-sm transition flex items-center gap-2 shadow-xs cursor-pointer active:scale-95"
+            >
+              <KeyRound className="w-4 h-4 text-amber-300" />
+              <span>+ Link Patient with Key / Phone</span>
+            </button>
+            {onAddNewPatient && (
+              <button
+                type="button"
+                onClick={onAddNewPatient}
+                className="px-5 py-3 rounded-2xl bg-amber-500 hover:bg-amber-400 text-stone-950 font-bold text-xs sm:text-sm transition flex items-center gap-2 shadow-xs cursor-pointer active:scale-95"
+              >
+                <Plus className="w-4 h-4" />
+                <span>+ Register New Patient</span>
+              </button>
+            )}
+          </div>
+        </div>
+      ) : (
+        <>
       {/* Patients Under Care Selector (Teacher & Students Model) */}
       {allPatients && allPatients.length > 0 && (
         <div className="bg-white rounded-3xl border border-stone-200 p-5 shadow-xs space-y-3">
@@ -802,6 +947,8 @@ export const CaregiverDashboard: React.FC<CaregiverDashboardProps> = ({
           </div>
         </div>
       </div>
+      </>
+      )}
 
       {/* Mandatory Medical Safety Disclaimer */}
       <div className="rounded-2xl bg-stone-100 p-5 border border-stone-200 text-stone-700 flex items-start gap-3">

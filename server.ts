@@ -102,6 +102,8 @@ app.post('/api/auth/register', (req, res) => {
 
     if (role === 'PATIENT') {
       const patientId = `patient-${Date.now()}`;
+      const userPatientKey = (profile.patientKey?.trim() || `PT-${Math.floor(100000 + Math.random() * 900000)}`).toUpperCase();
+
       const newPatient: PatientProfile = {
         id: patientId,
         fullName: fullName.trim(),
@@ -109,18 +111,19 @@ app.post('/api/auth/register', (req, res) => {
         username: cleanUsername,
         password: password,
         pin: profile.pin || password.slice(0, 4),
+        patientKey: userPatientKey,
         age: Number(profile.age) || 70,
         region: profile.region?.trim() || 'Guwahati, Assam',
         state: profile.state || 'Assam',
         preferredLanguage: profile.preferredLanguage || 'en',
         phone: cleanPhone,
-        hasCaregiver: Boolean(profile.hasCaregiver),
+        hasCaregiver: Boolean(profile.hasCaregiver || profile.linkedCaregiverKey),
         caregiverName: profile.caregiverName?.trim() || 'Family Caregiver',
         caregiverPhone: profile.caregiverPhone?.trim() || '',
         avatarUrl: profile.avatarUrl || '',
         dailyStreak: 0,
         todayCompletedCount: 0,
-        linkedCaregiverKey: profile.linkedCaregiverKey || '',
+        linkedCaregiverKey: profile.linkedCaregiverKey?.trim().toUpperCase() || '',
       };
 
       ServerDB.addPatient(newPatient);
@@ -138,7 +141,7 @@ app.post('/api/auth/register', (req, res) => {
       for (let i = 0; i < 6; i++) {
         code += chars.charAt(Math.floor(Math.random() * chars.length));
       }
-      const caregiverKey = `CG-${code}`;
+      const userCaregiverKey = (profile.caregiverKey?.trim() || `CG-${code}`).toUpperCase();
 
       const newCaretaker: CaretakerProfile = {
         id: caretakerId,
@@ -149,7 +152,7 @@ app.post('/api/auth/register', (req, res) => {
         email: profile.email?.trim() || '',
         relation: profile.relation?.trim() || 'Family Member',
         pin: profile.pin || password.slice(0, 4),
-        caregiverKey: caregiverKey,
+        caregiverKey: userCaregiverKey,
         assignedPatientIds: profile.assignedPatientIds || [],
         avatarUrl: profile.avatarUrl || '',
       };
@@ -219,11 +222,14 @@ app.post('/api/auth/login', (req, res) => {
         return;
       }
 
-      // Find assigned patient
+      // Find assigned patient for this caregiver (NO fallback to unassigned patient)
       const allPatients = ServerDB.getPatients();
       const assigned =
-        allPatients.find((p) => caretaker.assignedPatientIds.includes(p.id)) ||
-        allPatients[0];
+        allPatients.find(
+          (p) =>
+            caretaker.assignedPatientIds.includes(p.id) ||
+            (p.linkedCaregiverKey && p.linkedCaregiverKey.toUpperCase() === (caretaker.caregiverKey || '').toUpperCase())
+        ) || null;
 
       res.json({
         success: true,
@@ -238,6 +244,79 @@ app.post('/api/auth/login', (req, res) => {
     console.error('Login error:', err);
     res.status(500).json({ error: 'Login failed', details: err?.message });
   }
+});
+
+// Link patient to caregiver (by Patient Key, Phone, or Username)
+app.post('/api/caretakers/:id/link-patient', (req, res) => {
+  try {
+    const { identifier } = req.body;
+    if (!identifier) {
+      res.status(400).json({ error: 'Patient key, mobile number, or username is required.' });
+      return;
+    }
+    const result = ServerDB.linkPatientToCaretaker(req.params.id, String(identifier).trim());
+    if (!result.success) {
+      res.status(404).json({ error: result.error });
+      return;
+    }
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to link patient', details: err?.message });
+  }
+});
+
+// Link caregiver to patient (by Caregiver Key only)
+app.post('/api/patients/:id/link-caregiver', (req, res) => {
+  try {
+    const { caregiverKey } = req.body;
+    if (!caregiverKey) {
+      res.status(400).json({ error: 'Caregiver key is required.' });
+      return;
+    }
+    const result = ServerDB.linkCaregiverToPatient(req.params.id, String(caregiverKey).trim());
+    if (!result.success) {
+      res.status(404).json({ error: result.error });
+      return;
+    }
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to link caregiver', details: err?.message });
+  }
+});
+
+// Synchronized Memories APIs
+app.get('/api/memories/:patientId', (req, res) => {
+  res.json(ServerDB.getMemories(req.params.patientId));
+});
+
+app.post('/api/memories/:patientId', (req, res) => {
+  const memory = req.body;
+  if (!memory || !memory.id) {
+    res.status(400).json({ error: 'Invalid memory data' });
+    return;
+  }
+  const updated = ServerDB.addMemory(req.params.patientId, memory);
+  res.json(updated);
+});
+
+app.delete('/api/memories/:patientId/:memoryId', (req, res) => {
+  const updated = ServerDB.deleteMemory(req.params.patientId, req.params.memoryId);
+  res.json(updated);
+});
+
+// Synchronized Sessions & Real-time Reports APIs
+app.get('/api/sessions/:patientId', (req, res) => {
+  res.json(ServerDB.getSessions(req.params.patientId));
+});
+
+app.post('/api/sessions/:patientId', (req, res) => {
+  const session = req.body;
+  if (!session || !session.id) {
+    res.status(400).json({ error: 'Invalid session data' });
+    return;
+  }
+  const updated = ServerDB.addSession(req.params.patientId, session);
+  res.json(updated);
 });
 
 // Patients endpoint
@@ -268,6 +347,88 @@ app.post('/api/caretakers', (req, res) => {
   }
   const saved = ServerDB.addCaretaker(caretaker);
   res.json(saved);
+});
+
+// Update Caregiver Key endpoint
+app.patch('/api/caretakers/:id/key', (req, res) => {
+  try {
+    const { caregiverKey } = req.body;
+    if (!caregiverKey || typeof caregiverKey !== 'string') {
+      res.status(400).json({ error: 'Caregiver key is required' });
+      return;
+    }
+    const cleanKey = caregiverKey.trim().toUpperCase();
+    if (cleanKey.length < 3) {
+      res.status(400).json({ error: 'Caregiver key must be at least 3 characters' });
+      return;
+    }
+    const caretakers = ServerDB.getCaretakers();
+    const caretaker = caretakers.find((c: any) => c.id === req.params.id);
+    if (!caretaker) {
+      res.status(404).json({ error: 'Caregiver not found' });
+      return;
+    }
+    const isTaken = caretakers.some(
+      (c: any) => c.id !== req.params.id && (c.caregiverKey || '').toUpperCase() === cleanKey
+    );
+    if (isTaken) {
+      res.status(400).json({ error: `Caregiver key "${cleanKey}" is already taken by another caregiver.` });
+      return;
+    }
+    const oldKey = caretaker.caregiverKey;
+    caretaker.caregiverKey = cleanKey;
+    ServerDB.addCaretaker(caretaker);
+
+    // Update patients linked with old key
+    if (oldKey) {
+      const patients = ServerDB.getPatients();
+      patients.forEach((p: any) => {
+        if ((p.linkedCaregiverKey || '').toUpperCase() === oldKey.toUpperCase()) {
+          p.linkedCaregiverKey = cleanKey;
+          ServerDB.addPatient(p);
+        }
+      });
+    }
+
+    res.json({ success: true, caretaker });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to update caregiver key', details: err?.message });
+  }
+});
+
+// Update Patient Key endpoint
+app.patch('/api/patients/:id/key', (req, res) => {
+  try {
+    const { patientKey } = req.body;
+    if (!patientKey || typeof patientKey !== 'string') {
+      res.status(400).json({ error: 'Patient key is required' });
+      return;
+    }
+    const cleanKey = patientKey.trim().toUpperCase();
+    if (cleanKey.length < 3) {
+      res.status(400).json({ error: 'Patient key must be at least 3 characters' });
+      return;
+    }
+    const patients = ServerDB.getPatients();
+    const patient = patients.find((p: any) => p.id === req.params.id);
+    if (!patient) {
+      res.status(404).json({ error: 'Patient not found' });
+      return;
+    }
+    const isTaken = patients.some(
+      (p: any) => p.id !== req.params.id && (p.patientKey || '').toUpperCase() === cleanKey
+    );
+    if (isTaken) {
+      res.status(400).json({ error: `Patient key "${cleanKey}" is already taken by another patient.` });
+      return;
+    }
+    patient.patientKey = cleanKey;
+    ServerDB.addPatient(patient);
+
+    res.json({ success: true, patient });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to update patient key', details: err?.message });
+  }
 });
 
 // -------------------------------------------------------------

@@ -90,6 +90,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   const [regConfirmPassword, setRegConfirmPassword] = useState('');
   const [showRegPassword, setShowRegPassword] = useState(false);
   const [regAvatar, setRegAvatar] = useState<string | undefined>(undefined);
+  const [regPatientKey, setRegPatientKey] = useState('');
+  const [regPatientLinkedCaregiverKey, setRegPatientLinkedCaregiverKey] = useState('');
 
   // Caregiver Registration Form State (ALL FIELDS MANDATORY)
   const [regCaregiverName, setRegCaregiverName] = useState('');
@@ -100,6 +102,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   const [regCaregiverPin, setRegCaregiverPin] = useState('');
   const [regCaregiverConfirmPin, setRegCaregiverConfirmPin] = useState('');
   const [regCaregiverKey, setRegCaregiverKey] = useState('');
+  const [regCaregiverLinkPatientKey, setRegCaregiverLinkPatientKey] = useState('');
 
   // UI state
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -291,25 +294,29 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
 
     try {
       const patientId = `patient-${Date.now()}`;
+      const customPatientKey = regPatientKey.trim().toUpperCase() || `PT-${Math.floor(100000 + Math.random() * 900000)}`;
+      const cleanLinkedCaregiverKey = regPatientLinkedCaregiverKey.trim().toUpperCase();
+
       const newPatient: PatientProfile = {
         id: patientId,
         fullName: fullNameTrim,
         preferredName: regPreferredName.trim() || fullNameTrim.split(' ')[0],
         username: usernameTrim,
+        patientKey: customPatientKey,
         age: ageNum,
         region: regState,
         state: regState,
         preferredLanguage: regPreferredLang,
         caregiverName: 'Family Caregiver',
         caregiverPhone: '',
-        linkedCaregiverKey: '',
+        linkedCaregiverKey: cleanLinkedCaregiverKey,
         avatarUrl: regAvatar || '',
         dailyStreak: 0,
         todayCompletedCount: 0,
         password: regPassword.trim(),
         pin: regPassword.trim(),
         phone: phoneTrim,
-        hasCaregiver: false,
+        hasCaregiver: Boolean(cleanLinkedCaregiverKey),
       };
 
       // 1. Send registration to Server Database
@@ -333,6 +340,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
 
       // Also save in local offline store
       OfflineStore.addPatient(newPatient);
+      if (cleanLinkedCaregiverKey) {
+        OfflineStore.linkPatientToCaregiverByKey(patientId, cleanLinkedCaregiverKey);
+      }
 
       // FLOW REQUIREMENT: Register -> Login -> App
       // Switch immediately to LOGIN mode with phone pre-filled
@@ -384,7 +394,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
       if (res.ok) {
         const data = await res.json();
         const target: CaretakerProfile = data.caretaker;
-        const assignedPatient: PatientProfile = data.patient || OfflineStore.getPatients()[0];
+        const assignedPatient: PatientProfile | null = data.patient || null;
 
         OfflineStore.saveAuthSession({
           role: 'CAREGIVER',
@@ -432,8 +442,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
 
       const allPatients = OfflineStore.getPatients();
       const assignedPatient =
-        allPatients.find((p) => target.assignedPatientIds.includes(p.id)) ||
-        allPatients[0];
+        allPatients.find(
+          (p) =>
+            target.assignedPatientIds.includes(p.id) ||
+            (p.linkedCaregiverKey &&
+              target.caregiverKey &&
+              p.linkedCaregiverKey.toUpperCase() === target.caregiverKey.toUpperCase())
+        ) || null;
 
       OfflineStore.saveAuthSession({
         role: 'CAREGIVER',
@@ -492,13 +507,15 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
 
     try {
       const newCaretakerId = `caretaker-${Date.now()}`;
+      const chosenCaregiverKey = regCaregiverKey.trim().toUpperCase() || OfflineStore.generateCaregiverKey();
+
       const newCaretaker: CaretakerProfile = {
         id: newCaretakerId,
         fullName: nameTrim,
         username: usernameTrim,
         password: regCaregiverPin.trim(),
         pin: regCaregiverPin.trim(),
-        caregiverKey: OfflineStore.generateCaregiverKey(),
+        caregiverKey: chosenCaregiverKey,
         relation: regCaregiverRelation.trim() || 'Primary Caregiver',
         phone: phoneTrim,
         email: regCaregiverEmail.trim(),
@@ -524,12 +541,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         return;
       }
 
-      // If caregiver provided a key, link locally as well
-      if (regCaregiverKey.trim()) {
-        OfflineStore.addCaretaker(newCaretaker);
-        OfflineStore.linkCaregiverToPatientByKey(newCaretakerId, regCaregiverKey);
-      } else {
-        OfflineStore.addCaretaker(newCaretaker);
+      // Save locally
+      OfflineStore.addCaretaker(newCaretaker);
+
+      // If caregiver provided an existing patient key to link, link immediately
+      if (regCaregiverLinkPatientKey.trim()) {
+        OfflineStore.linkCaregiverToPatientByKey(newCaretakerId, regCaregiverLinkPatientKey.trim().toUpperCase());
       }
 
       // FLOW REQUIREMENT: Register -> Login -> App
@@ -549,16 +566,29 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   };
 
   return (
-    <div className="min-h-screen bg-[#FAF8F5] dark:bg-[#0E1318] text-[#292524] dark:text-[#E2E8F0] flex flex-col justify-between p-4 sm:p-6 lg:p-8">
+    <div className="min-h-screen bg-[#FBF9F5] dark:bg-[#0D1117] text-stone-900 dark:text-[#E6EDF3] flex flex-col justify-between p-4 sm:p-6 lg:p-8 transition-colors duration-200">
       {/* Top Header */}
-      <header className="max-w-4xl w-full mx-auto flex items-center justify-between py-4 border-b border-stone-200 dark:border-stone-800">
-        <div>
-          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold font-serif-heading text-stone-900 dark:text-stone-100 tracking-tight">
-            CognitiveSaathi
-          </h1>
-          <p className="text-xs sm:text-sm text-stone-600 dark:text-stone-400 font-medium mt-0.5">
-            Cognitive Care & Memory Assistance • Persistent Database Login
-          </p>
+      <header className="max-w-4xl w-full mx-auto flex items-center justify-between py-4 border-b border-stone-200/80 dark:border-stone-800">
+        <div className="flex items-center gap-3">
+          <div className="flex h-11 w-11 sm:h-12 sm:w-12 items-center justify-center rounded-2xl bg-teal-800 dark:bg-teal-700 shadow-sm shrink-0 border border-teal-600/40">
+            <svg viewBox="0 0 512 512" className="h-7 w-7 sm:h-8 sm:w-8" aria-hidden="true">
+              <circle cx="256" cy="256" r="180" fill="#0f766e" opacity="0.4" />
+              <g transform="translate(256, 260) scale(1.15)">
+                <path d="M0,-110 C25,-60 30,-20 0,30 C-30,-20 -25,-60 0,-110 Z" fill="#fef3c7" />
+                <path d="M-15,-30 C-75,-40 -110,10 -80,60 C-45,80 -10,65 0,30 C-5,5 -10,-15 -15,-30 Z" fill="#99f6e4" opacity="0.9" />
+                <path d="M15,-30 C75,-40 110,10 80,60 C45,80 10,65 0,30 C5,5 10,-15 15,-30 Z" fill="#99f6e4" opacity="0.9" />
+                <path d="M-90,50 C-60,110 60,110 90,50 C40,80 -40,80 -90,50 Z" fill="#f59e0b" />
+              </g>
+            </svg>
+          </div>
+          <div>
+            <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold font-serif-heading text-stone-900 dark:text-stone-100 tracking-tight">
+              CognitiveSaathi
+            </h1>
+            <p className="text-xs sm:text-sm text-stone-600 dark:text-stone-400 font-medium mt-0.5">
+              Cognitive Care & Memory Assistance • Persistent Database Login
+            </p>
+          </div>
         </div>
 
         <div className="flex items-center gap-2 sm:gap-3">
@@ -578,7 +608,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
             <button
               type="button"
               onClick={onToggleTheme}
-              className="p-2 rounded-full border border-stone-300 dark:border-stone-700 bg-white dark:bg-[#1A222C] text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 transition shadow-2xs"
+              className="p-2 rounded-full border border-stone-300 dark:border-stone-700 bg-white dark:bg-[#161B22] text-stone-700 dark:text-stone-200 hover:bg-stone-100 dark:hover:bg-stone-800 transition shadow-2xs cursor-pointer"
               title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
               aria-label="Toggle Theme"
             >
@@ -627,13 +657,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                 setErrorMsg(null);
                 setSuccessMsg(null);
               }}
-              className={`p-4 sm:p-5 rounded-3xl border-2 transition text-left flex flex-col items-center sm:items-start gap-2.5 shadow-xs relative ${
+              className={`p-4 sm:p-5 rounded-3xl border-2 transition text-left flex flex-col items-center sm:items-start gap-2.5 shadow-xs relative cursor-pointer ${
                 selectedSpace === 'PATIENT'
-                  ? 'bg-amber-50/80 dark:bg-amber-950/30 border-teal-700 dark:border-teal-400 ring-2 ring-teal-700/20'
-                  : 'bg-white dark:bg-[#1A222C] border-stone-200 dark:border-stone-700 hover:border-stone-300 dark:hover:border-stone-600'
+                  ? 'bg-amber-50 dark:bg-amber-950/40 border-amber-600 dark:border-amber-400 ring-2 ring-amber-600/20'
+                  : 'bg-white dark:bg-[#161B22] border-stone-200 dark:border-stone-800 hover:border-stone-300 dark:hover:border-stone-700'
               }`}
             >
-              <div className="w-12 h-12 rounded-2xl bg-amber-100 dark:bg-amber-950/60 text-rose-600 flex items-center justify-center shadow-xs border border-amber-200 dark:border-amber-800">
+              <div className="w-12 h-12 rounded-2xl bg-amber-100 dark:bg-amber-900/60 text-rose-600 dark:text-rose-300 flex items-center justify-center shadow-xs border border-amber-200 dark:border-amber-800">
                 <Heart className="w-6 h-6 fill-current" />
               </div>
               <div className="text-center sm:text-left">
@@ -641,9 +671,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                   <h3 className="text-sm sm:text-base font-bold text-stone-900 dark:text-stone-100">
                     Patient Space
                   </h3>
-                  {selectedSpace === 'PATIENT' && <CheckCircle2 className="w-4 h-4 text-teal-700 dark:text-teal-400" />}
+                  {selectedSpace === 'PATIENT' && <CheckCircle2 className="w-4 h-4 text-amber-600 dark:text-amber-400" />}
                 </div>
-                <p className="text-[11px] text-stone-500 dark:text-stone-400 mt-0.5">
+                <p className="text-[11px] text-stone-600 dark:text-stone-400 mt-0.5">
                   Daily routines, exercises & voice saathi
                 </p>
               </div>
@@ -658,13 +688,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                 setErrorMsg(null);
                 setSuccessMsg(null);
               }}
-              className={`p-4 sm:p-5 rounded-3xl border-2 transition text-left flex flex-col items-center sm:items-start gap-2.5 shadow-xs relative ${
+              className={`p-4 sm:p-5 rounded-3xl border-2 transition text-left flex flex-col items-center sm:items-start gap-2.5 shadow-xs relative cursor-pointer ${
                 selectedSpace === 'CAREGIVER'
-                  ? 'bg-teal-50/80 dark:bg-teal-950/30 border-teal-700 dark:border-teal-400 ring-2 ring-teal-700/20'
-                  : 'bg-white dark:bg-[#1A222C] border-stone-200 dark:border-stone-700 hover:border-stone-300 dark:hover:border-stone-600'
+                  ? 'bg-teal-50 dark:bg-teal-950/40 border-teal-600 dark:border-teal-400 ring-2 ring-teal-600/20'
+                  : 'bg-white dark:bg-[#161B22] border-stone-200 dark:border-stone-800 hover:border-stone-300 dark:hover:border-stone-700'
               }`}
             >
-              <div className="w-12 h-12 rounded-2xl bg-teal-100 dark:bg-teal-950/60 text-teal-800 dark:text-teal-300 flex items-center justify-center shadow-xs border border-teal-200 dark:border-teal-800">
+              <div className="w-12 h-12 rounded-2xl bg-teal-100 dark:bg-teal-900/60 text-teal-800 dark:text-teal-300 flex items-center justify-center shadow-xs border border-teal-200 dark:border-teal-800">
                 <ShieldCheck className="w-6 h-6" />
               </div>
               <div className="text-center sm:text-left">
@@ -672,9 +702,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                   <h3 className="text-sm sm:text-base font-bold text-stone-900 dark:text-stone-100">
                     Caregiver Space
                   </h3>
-                  {selectedSpace === 'CAREGIVER' && <CheckCircle2 className="w-4 h-4 text-teal-800 dark:text-teal-400" />}
+                  {selectedSpace === 'CAREGIVER' && <CheckCircle2 className="w-4 h-4 text-teal-700 dark:text-teal-400" />}
                 </div>
-                <p className="text-[11px] text-stone-500 dark:text-stone-400 mt-0.5">
+                <p className="text-[11px] text-stone-600 dark:text-stone-400 mt-0.5">
                   Family schedules, alerts & monitoring
                 </p>
               </div>
@@ -683,7 +713,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         </div>
 
         {/* Space Authentication Card */}
-        <div className="rounded-3xl bg-white dark:bg-[#1A222C] border border-stone-200 dark:border-stone-700 p-5 sm:p-7 shadow-xs space-y-5">
+        <div className="rounded-3xl bg-white dark:bg-[#161B22] border border-stone-200 dark:border-stone-800 p-5 sm:p-7 shadow-xs space-y-5">
           {/* Header row: Space Name + Mode Switcher */}
           <div className="flex items-center justify-between border-b border-stone-100 dark:border-stone-800 pb-3.5">
             <span className="text-sm font-bold text-stone-900 dark:text-stone-100">
@@ -990,6 +1020,46 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                         </div>
                       </div>
                     </div>
+
+                    {/* Patient Key Setting */}
+                    <div className="p-3.5 rounded-2xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <label htmlFor="reg-patient-key" className="text-xs font-bold text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
+                          <KeyRound className="w-3.5 h-3.5 text-amber-700 dark:text-amber-400" />
+                          <span>Set Your Patient Key (Personal or Auto)</span>
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => setRegPatientKey(`PT-${Math.floor(100000 + Math.random() * 900000)}`)}
+                          className="text-[11px] text-amber-800 dark:text-amber-300 font-bold underline cursor-pointer"
+                        >
+                          🎲 Randomize
+                        </button>
+                      </div>
+                      <input
+                        id="reg-patient-key"
+                        type="text"
+                        value={regPatientKey}
+                        onChange={(e) => setRegPatientKey(e.target.value.toUpperCase())}
+                        placeholder="e.g. PT-DAD72, AMMA-CARE (leave blank to auto-generate)"
+                        className="w-full px-3 py-2 rounded-xl border border-amber-300 dark:border-amber-700 text-xs font-mono font-bold tracking-wider text-amber-950 dark:text-amber-100 uppercase bg-white dark:bg-[#121820]"
+                      />
+                    </div>
+
+                    {/* Connect with Caregiver Key (Optional) */}
+                    <div className="p-3.5 rounded-2xl bg-teal-50/70 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800 space-y-1">
+                      <label htmlFor="reg-patient-cg-key" className="text-xs font-bold text-teal-900 dark:text-teal-200 block">
+                        Link Caregiver with Caregiver Key (Optional)
+                      </label>
+                      <input
+                        id="reg-patient-cg-key"
+                        type="text"
+                        value={regPatientLinkedCaregiverKey}
+                        onChange={(e) => setRegPatientLinkedCaregiverKey(e.target.value.toUpperCase())}
+                        placeholder="e.g. CG-CARE88 (if caregiver gave you their key)"
+                        className="w-full px-3 py-2 rounded-xl border border-teal-300 dark:border-teal-700 text-xs font-mono font-bold tracking-wider text-teal-950 dark:text-teal-100 uppercase bg-white dark:bg-[#121820]"
+                      />
+                    </div>
                   </div>
 
                   <button
@@ -1240,18 +1310,43 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                       </div>
                     </div>
 
-                    {/* Caregiver Key Linking Field */}
-                    <div className="p-3.5 rounded-2xl bg-teal-50/70 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 space-y-1">
-                      <label htmlFor="reg-cg-key" className="text-xs font-bold text-teal-900 dark:text-teal-200 block">
-                        Link Patient with Caregiver Key (Optional)
-                      </label>
+                    {/* Caregiver Set Own Key */}
+                    <div className="p-3.5 rounded-2xl bg-teal-50/70 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <label htmlFor="reg-cg-key" className="text-xs font-bold text-teal-900 dark:text-teal-200 flex items-center gap-1.5">
+                          <KeyRound className="w-3.5 h-3.5 text-teal-700 dark:text-teal-400" />
+                          <span>Set Your Caregiver Key (Personal or Auto)</span>
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => setRegCaregiverKey(`CG-${Math.floor(100000 + Math.random() * 900000)}`)}
+                          className="text-[11px] text-teal-800 dark:text-teal-300 font-bold underline cursor-pointer"
+                        >
+                          🎲 Randomize
+                        </button>
+                      </div>
                       <input
                         id="reg-cg-key"
                         type="text"
                         value={regCaregiverKey}
                         onChange={(e) => setRegCaregiverKey(e.target.value.toUpperCase())}
-                        placeholder="e.g. CG-CARE88"
+                        placeholder="e.g. CG-CARE88, PRIYA-CARE (leave blank to auto-generate)"
                         className="w-full px-3.5 py-2 rounded-xl border border-teal-300 dark:border-teal-700 text-xs font-mono font-bold tracking-wider text-teal-950 dark:text-teal-100 uppercase bg-white dark:bg-[#121820]"
+                      />
+                    </div>
+
+                    {/* Optional Link Patient */}
+                    <div className="p-3.5 rounded-2xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 space-y-1">
+                      <label htmlFor="reg-cg-patient-key" className="text-xs font-bold text-amber-900 dark:text-amber-200 block">
+                        Link Existing Patient by Patient Key (Optional)
+                      </label>
+                      <input
+                        id="reg-cg-patient-key"
+                        type="text"
+                        value={regCaregiverLinkPatientKey}
+                        onChange={(e) => setRegCaregiverLinkPatientKey(e.target.value.toUpperCase())}
+                        placeholder="e.g. PT-123456 (if patient has a key)"
+                        className="w-full px-3.5 py-2 rounded-xl border border-amber-300 dark:border-amber-700 text-xs font-mono font-bold tracking-wider text-amber-950 dark:text-amber-100 uppercase bg-white dark:bg-[#121820]"
                       />
                     </div>
                   </div>

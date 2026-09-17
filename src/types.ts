@@ -29,7 +29,7 @@ export type GameId =
   | 'object-familiarity';
 
 export interface GameDefinition {
-  id: GameId;
+  id: GameId | string;
   title: string;
   category: GameCategory;
   shortDescription: string;
@@ -81,6 +81,7 @@ export interface RoutineTask {
 
 export interface MemoryMoment {
   id: string;
+  patientId?: string;
   title: string;
   category: 'Family' | 'Festival' | 'Place' | 'Tradition' | string;
   region: string;
@@ -103,6 +104,7 @@ export interface PatientProfile {
   username?: string;
   password?: string;
   pin?: string;
+  patientKey?: string;
   linkedCaregiverKey?: string;
   age: number;
   region: string;

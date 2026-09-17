@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { Plus, Clock, Heart, Trash2, CheckCircle2, ShieldCheck, X } from 'lucide-react';
-import { ReminderItem, ReminderType, LanguageCode } from '../../types';
+import { ReminderItem, ReminderType, LanguageCode, PatientProfile } from '../../types';
 import { translations } from '../../lib/i18n';
 import { OfflineStore } from '../../lib/offlineStore';
 
 interface CaregiverRemindersProps {
+  patient?: PatientProfile | null;
   reminders: ReminderItem[];
   onAddReminder: (newReminder: ReminderItem) => void;
   onToggleReminderEnabled: (id: string) => void;
@@ -13,6 +14,7 @@ interface CaregiverRemindersProps {
 }
 
 export const CaregiverReminders: React.FC<CaregiverRemindersProps> = ({
+  patient,
   reminders,
   onAddReminder,
   onToggleReminderEnabled,
@@ -26,6 +28,22 @@ export const CaregiverReminders: React.FC<CaregiverRemindersProps> = ({
   const [newTime, setNewTime] = useState('09:00 AM');
   const [newType, setNewType] = useState<ReminderType>('MEDICINE');
   const [newPeriod, setNewPeriod] = useState<'Morning' | 'Afternoon' | 'Evening'>('Morning');
+
+  const hasValidPatient = Boolean(patient && patient.id && patient.fullName && patient.fullName.trim() !== '');
+
+  if (!hasValidPatient) {
+    return (
+      <div className="bg-white rounded-3xl border border-stone-200 p-8 sm:p-12 text-center shadow-xs space-y-4 max-w-lg mx-auto my-8 animate-fadeIn">
+        <div className="w-14 h-14 rounded-2xl bg-teal-50 text-teal-800 flex items-center justify-center mx-auto border border-teal-200">
+          <Clock className="w-7 h-7 text-teal-800" />
+        </div>
+        <h3 className="font-bold text-stone-900 text-lg font-serif-heading">No Patient Linked Yet</h3>
+        <p className="text-xs sm:text-sm text-stone-600 leading-relaxed">
+          Link or register a patient under your care to configure medication schedules and daily supportive reminders.
+        </p>
+      </div>
+    );
+  }
 
   const handleSaveReminder = (e: React.FormEvent) => {
     e.preventDefault();

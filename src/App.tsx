@@ -4,7 +4,7 @@
  * AI-Based Cognitive Gaming and Memory Assistance Platform for Elderly Dementia Patients in NER
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Home,
   Sparkles,
@@ -61,12 +61,12 @@ import { CaregiverDashboard } from './components/caregiver/CaregiverDashboard';
 import { CaregiverReminders } from './components/caregiver/CaregiverReminders';
 import { CaregiverPatientDetail } from './components/caregiver/CaregiverPatientDetail';
 import { CaregiverReports } from './components/caregiver/CaregiverReports';
+import { CaregiverMeProfile } from './components/caregiver/CaregiverMeProfile';
 import { CaregiverMemoriesManager } from './components/caregiver/CaregiverMemoriesManager';
 import { CaregiverActivitiesView } from './components/caregiver/CaregiverActivitiesView';
 import { CaretakerRoutineManager } from './components/caregiver/CaretakerRoutineManager';
 import { AICaretakerCompanion } from './components/ai/AICaretakerCompanion';
 import { HealthcareDashboard } from './components/healthcare/HealthcareDashboard';
-import { CaregiverPinModal } from './components/auth/CaregiverPinModal';
 import { AddPatientModal } from './components/caregiver/AddPatientModal';
 import { LogoutConfirmModal } from './components/common/LogoutConfirmModal';
 import { Bot, Lock } from 'lucide-react';
@@ -108,7 +108,7 @@ export default function App() {
     return session?.role || 'PATIENT';
   });
   const [patientTab, setPatientTab] = useState<'home' | 'activities' | 'my_day' | 'memories' | 'me' | 'settings'>('home');
-  const [caregiverTab, setCaregiverTab] = useState<'dashboard' | 'activities' | 'memories' | 'routine' | 'reminders' | 'patient_detail' | 'reports'>('dashboard');
+  const [caregiverTab, setCaregiverTab] = useState<'dashboard' | 'activities' | 'memories' | 'routine' | 'reminders' | 'patient_detail' | 'reports' | 'me'>('dashboard');
   const [activeGame, setActiveGame] = useState<GameDefinition | null>(null);
 
   // Scroll isolation fix: reset scroll position whenever view, tab, or role changes
@@ -140,14 +140,6 @@ export default function App() {
 
   // Application Data & Local Offline Store
   const [allPatients, setAllPatients] = useState<PatientProfile[]>(() => OfflineStore.getPatients());
-  const [patient, setPatient] = useState<PatientProfile>(() => {
-    const session = OfflineStore.getAuthSession();
-    if (session?.patientId) {
-      const found = OfflineStore.getPatient(session.patientId);
-      if (found) return found;
-    }
-    return OfflineStore.getPatient() || DEFAULT_PATIENT;
-  });
   const [activeCaretaker, setActiveCaretaker] = useState<CaretakerProfile | null>(() => {
     const session = OfflineStore.getAuthSession();
     if (session?.role === 'CAREGIVER' && session.caretakerId) {
@@ -155,6 +147,49 @@ export default function App() {
       return caretakers.find((c) => c.id === session.caretakerId) || null;
     }
     return null;
+  });
+
+  // Filter patients belonging to active caregiver (or all if not caregiver)
+  const caregiverPatients = useMemo(() => {
+    if (!activeCaretaker) return allPatients;
+    return allPatients.filter(
+      (p) =>
+        activeCaretaker.assignedPatientIds?.includes(p.id) ||
+        (p.linkedCaregiverKey &&
+          activeCaretaker.caregiverKey &&
+          p.linkedCaregiverKey.toUpperCase() === activeCaretaker.caregiverKey.toUpperCase())
+    );
+  }, [allPatients, activeCaretaker]);
+
+  const [patient, setPatient] = useState<PatientProfile>(() => {
+    const session = OfflineStore.getAuthSession();
+    if (session?.role === 'CAREGIVER') {
+      if (session.patientId) {
+        const found = OfflineStore.getPatient(session.patientId);
+        if (found) return found;
+      }
+      // Clean slate if caregiver has no patients assigned
+      return {
+        id: '',
+        fullName: '',
+        preferredName: '',
+        username: '',
+        age: 0,
+        region: '',
+        state: '',
+        preferredLanguage: 'en',
+        caregiverName: '',
+        caregiverPhone: '',
+        avatarUrl: '',
+        dailyStreak: 0,
+        todayCompletedCount: 0,
+      };
+    }
+    if (session?.patientId) {
+      const found = OfflineStore.getPatient(session.patientId);
+      if (found) return found;
+    }
+    return OfflineStore.getPatient() || DEFAULT_PATIENT;
   });
   const [routine, setRoutine] = useState<RoutineTask[]>(DEFAULT_ROUTINE);
   const [reminders, setReminders] = useState<ReminderItem[]>(DEFAULT_REMINDERS);
@@ -164,40 +199,58 @@ export default function App() {
   // Initialize data from local storage & register Service Worker
   useEffect(() => {
     const session = OfflineStore.getAuthSession();
-    let loadedPatient = OfflineStore.getPatient() || DEFAULT_PATIENT;
-
     if (session) {
       if (session.role === 'PATIENT' && session.patientId) {
         const found = OfflineStore.getPatient(session.patientId);
-        if (found) loadedPatient = found;
+        const p = found || DEFAULT_PATIENT;
+        setPatient(p);
+        setRoutine(OfflineStore.getRoutine(p.id));
+        setReminders(OfflineStore.getReminders(p.id));
+        setSessions(OfflineStore.getSessions(p.id));
+        setMemories(OfflineStore.getMemories(p.id));
       } else if (session.role === 'CAREGIVER') {
+        let currentC: CaretakerProfile | null = null;
         if (session.caretakerId) {
           const caretakers = OfflineStore.getCaretakers();
-          const foundC = caretakers.find((c) => c.id === session.caretakerId);
-          if (foundC) setActiveCaretaker(foundC);
+          currentC = caretakers.find((c) => c.id === session.caretakerId) || null;
+          if (currentC) setActiveCaretaker(currentC);
         }
         if (session.patientId) {
           const found = OfflineStore.getPatient(session.patientId);
-          if (found) loadedPatient = found;
+          if (found) {
+            setPatient(found);
+            setRoutine(OfflineStore.getRoutine(found.id));
+            setReminders(OfflineStore.getReminders(found.id));
+            setSessions(OfflineStore.getSessions(found.id));
+            setMemories(OfflineStore.getMemories(found.id));
+            return;
+          }
+        }
+        // If caregiver has no assigned patients, keep clean slate
+        if (!currentC || !currentC.assignedPatientIds || currentC.assignedPatientIds.length === 0) {
+          setPatient({
+            id: '',
+            fullName: '',
+            preferredName: '',
+            username: '',
+            age: 0,
+            region: '',
+            state: '',
+            preferredLanguage: 'en',
+            caregiverName: currentC?.fullName || '',
+            caregiverPhone: currentC?.phone || '',
+            avatarUrl: '',
+            dailyStreak: 0,
+            todayCompletedCount: 0,
+            linkedCaregiverKey: currentC?.caregiverKey,
+          });
+          setRoutine([]);
+          setReminders([]);
+          setSessions([]);
+          setMemories([]);
         }
       }
     }
-
-    if (!loadedPatient) {
-      loadedPatient = DEFAULT_PATIENT;
-    }
-
-    const patientId = loadedPatient.id || DEFAULT_PATIENT.id;
-    const loadedRoutine = OfflineStore.getRoutine(patientId);
-    const loadedReminders = OfflineStore.getReminders(patientId);
-    const loadedSessions = OfflineStore.getSessions(patientId);
-    const loadedMemories = OfflineStore.getMemories(patientId);
-
-    setPatient(loadedPatient);
-    setRoutine(loadedRoutine);
-    setReminders(loadedReminders);
-    setSessions(loadedSessions);
-    setMemories(loadedMemories);
 
     // Initial online check
     if (typeof navigator !== 'undefined' && !navigator.onLine) {
@@ -336,19 +389,10 @@ export default function App() {
     }
   };
 
-  // Security Gate: Caregiver PIN Lock
-  const [isCaregiverPinModalOpen, setIsCaregiverPinModalOpen] = useState<boolean>(false);
-  const [pendingTargetRole, setPendingTargetRole] = useState<UserRole>('CAREGIVER');
-
+  // Direct role switching (Security PIN removed per user request)
   const handleRequestUnlockCaregiver = (targetRole: UserRole = 'CAREGIVER') => {
-    setPendingTargetRole(targetRole);
-    setIsCaregiverPinModalOpen(true);
-  };
-
-  const handleCaregiverPinSuccess = () => {
-    setIsCaregiverPinModalOpen(false);
-    setRole(pendingTargetRole);
-    if (pendingTargetRole === 'CAREGIVER') {
+    setRole(targetRole);
+    if (targetRole === 'CAREGIVER') {
       setCaregiverTab('dashboard');
     }
     setActiveGame(null);
@@ -368,6 +412,14 @@ export default function App() {
 
   const handleSaveNewPatient = (newPatient: PatientProfile) => {
     OfflineStore.addPatient(newPatient);
+    if (activeCaretaker) {
+      const updatedC = {
+        ...activeCaretaker,
+        assignedPatientIds: Array.from(new Set([...(activeCaretaker.assignedPatientIds || []), newPatient.id])),
+      };
+      OfflineStore.addCaretaker(updatedC);
+      setActiveCaretaker(updatedC);
+    }
     const updatedPatients = OfflineStore.getPatients();
     setAllPatients(updatedPatients);
     setPatient(newPatient);
@@ -376,6 +428,8 @@ export default function App() {
     setRoutine(patientRoutine);
     const patientMemories = OfflineStore.getMemories(newPatient.id);
     setMemories(patientMemories);
+    setReminders(OfflineStore.getReminders(newPatient.id));
+    setSessions(OfflineStore.getSessions(newPatient.id));
   };
 
   const handleUpdatePatient = (updated: PatientProfile) => {
@@ -386,14 +440,52 @@ export default function App() {
 
   const handleDeletePatient = (patientId: string) => {
     OfflineStore.deletePatient(patientId);
+    if (activeCaretaker) {
+      const updatedC = {
+        ...activeCaretaker,
+        assignedPatientIds: (activeCaretaker.assignedPatientIds || []).filter((id) => id !== patientId),
+      };
+      OfflineStore.addCaretaker(updatedC);
+      setActiveCaretaker(updatedC);
+    }
     const updated = OfflineStore.getPatients();
     setAllPatients(updated);
-    if (patient.id === patientId && updated.length > 0) {
-      const nextP = updated[0];
+    const remainingForCaregiver = updated.filter(
+      (p) =>
+        activeCaretaker?.assignedPatientIds?.includes(p.id) ||
+        (p.linkedCaregiverKey &&
+          activeCaretaker?.caregiverKey &&
+          p.linkedCaregiverKey.toUpperCase() === activeCaretaker.caregiverKey.toUpperCase())
+    );
+    if (remainingForCaregiver.length > 0) {
+      const nextP = remainingForCaregiver[0];
       setPatient(nextP);
       OfflineStore.setActivePatientId(nextP.id);
       setRoutine(OfflineStore.getRoutine(nextP.id));
       setMemories(OfflineStore.getMemories(nextP.id));
+      setSessions(OfflineStore.getSessions(nextP.id));
+      setReminders(OfflineStore.getReminders(nextP.id));
+    } else {
+      setPatient({
+        id: '',
+        fullName: '',
+        preferredName: '',
+        username: '',
+        age: 0,
+        region: '',
+        state: '',
+        preferredLanguage: 'en',
+        caregiverName: activeCaretaker?.fullName || '',
+        caregiverPhone: activeCaretaker?.phone || '',
+        avatarUrl: '',
+        dailyStreak: 0,
+        todayCompletedCount: 0,
+        linkedCaregiverKey: activeCaretaker?.caregiverKey,
+      });
+      setRoutine([]);
+      setMemories([]);
+      setSessions([]);
+      setReminders([]);
     }
   };
 
@@ -422,14 +514,37 @@ export default function App() {
           setIsLoggedIn(true);
         }}
         onLoginCaregiver={(caretaker, selectedPatient) => {
-          const targetPatient = selectedPatient || OfflineStore.getPatient() || DEFAULT_PATIENT;
           setActiveCaretaker(caretaker);
-          setPatient(targetPatient);
           setAllPatients(OfflineStore.getPatients());
-          setRoutine(OfflineStore.getRoutine(targetPatient.id));
-          setReminders(OfflineStore.getReminders(targetPatient.id));
-          setMemories(OfflineStore.getMemories(targetPatient.id));
-          setSessions(OfflineStore.getSessions(targetPatient.id));
+          if (selectedPatient) {
+            setPatient(selectedPatient);
+            setRoutine(OfflineStore.getRoutine(selectedPatient.id));
+            setReminders(OfflineStore.getReminders(selectedPatient.id));
+            setMemories(OfflineStore.getMemories(selectedPatient.id));
+            setSessions(OfflineStore.getSessions(selectedPatient.id));
+          } else {
+            // Clean slate for new caregiver: no pre-loaded patient, reports, or data
+            setPatient({
+              id: '',
+              fullName: '',
+              preferredName: '',
+              username: '',
+              age: 0,
+              region: '',
+              state: '',
+              preferredLanguage: 'en',
+              caregiverName: caretaker.fullName,
+              caregiverPhone: caretaker.phone,
+              avatarUrl: '',
+              dailyStreak: 0,
+              todayCompletedCount: 0,
+              linkedCaregiverKey: caretaker.caregiverKey,
+            });
+            setRoutine([]);
+            setReminders([]);
+            setMemories([]);
+            setSessions([]);
+          }
           setRole('CAREGIVER');
           setCaregiverTab('dashboard');
           setIsLoggedIn(true);
@@ -442,8 +557,8 @@ export default function App() {
 
   return (
     <div
-      className={`min-h-screen flex flex-col ${
-        highContrast ? 'bg-amber-50/20 text-stone-950 font-medium' : 'bg-[#FBF9F5] text-[#292524]'
+      className={`min-h-screen flex flex-col transition-colors duration-200 ${
+        highContrast ? 'bg-amber-50/20 text-stone-950 font-medium' : 'bg-[#FBF9F5] dark:bg-[#0D1117] text-[#292524] dark:text-[#E6EDF3]'
       } ${getTextScaleClass()}`}
     >
       {/* Universal Header Shell */}
@@ -655,7 +770,7 @@ export default function App() {
 
                   <button
                     onClick={() => setCaregiverTab('reports')}
-                    className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-semibold transition ${
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-semibold transition cursor-pointer ${
                       caregiverTab === 'reports'
                         ? 'bg-teal-800 text-white shadow-xs'
                         : 'bg-white dark:bg-[#161B22] text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 border border-stone-200 dark:border-stone-700'
@@ -663,6 +778,19 @@ export default function App() {
                   >
                     <FileText className="w-4 h-4" />
                     <span>Clinical Reports</span>
+                  </button>
+
+                  <button
+                    id="caregiver-nav-me-btn"
+                    onClick={() => setCaregiverTab('me')}
+                    className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-sm font-semibold transition cursor-pointer ${
+                      caregiverTab === 'me'
+                        ? 'bg-teal-800 text-white shadow-xs'
+                        : 'bg-white dark:bg-[#161B22] text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 border border-stone-200 dark:border-stone-700'
+                    }`}
+                  >
+                    <User className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                    <span>Me</span>
                   </button>
 
                   <div className="ml-auto flex items-center gap-2">
@@ -680,12 +808,14 @@ export default function App() {
                 {caregiverTab === 'dashboard' && (
                   <CaregiverDashboard
                     patient={patient}
-                    allPatients={allPatients}
+                    allPatients={caregiverPatients}
                     onSelectPatient={(selectedP) => {
                       setPatient(selectedP);
                       OfflineStore.setActivePatientId(selectedP.id);
                       setRoutine(OfflineStore.getRoutine(selectedP.id));
                       setMemories(OfflineStore.getMemories(selectedP.id));
+                      setSessions(OfflineStore.getSessions(selectedP.id));
+                      setReminders(OfflineStore.getReminders(selectedP.id));
                     }}
                     onAddNewPatient={() => setIsAddPatientModalOpen(true)}
                     onDeletePatient={handleDeletePatient}
@@ -704,11 +834,6 @@ export default function App() {
                     patient={patient}
                     games={DEFAULT_GAMES}
                     sessions={sessions}
-                    onPreviewGame={(game) => {
-                      setActiveGame(game);
-                      setRole('PATIENT');
-                      setPatientTab('activities');
-                    }}
                     lang={lang}
                   />
                 )}
@@ -762,6 +887,50 @@ export default function App() {
                     lang={lang}
                   />
                 )}
+
+                {caregiverTab === 'me' && (
+                  <CaregiverMeProfile
+                    caretaker={activeCaretaker}
+                    onUpdateCaretaker={(updated) => {
+                      setActiveCaretaker(updated);
+                    }}
+                    patients={caregiverPatients}
+                    activePatientId={patient.id}
+                    onSelectPatient={(selectedP) => {
+                      setPatient(selectedP);
+                      OfflineStore.setActivePatientId(selectedP.id);
+                      setRoutine(OfflineStore.getRoutine(selectedP.id));
+                      setReminders(OfflineStore.getReminders(selectedP.id));
+                      setMemories(OfflineStore.getMemories(selectedP.id));
+                      setSessions(OfflineStore.getSessions(selectedP.id));
+                    }}
+                    onOpenAddPatient={() => setIsAddPatientModalOpen(true)}
+                    onViewPatientDetail={(p) => {
+                      setPatient(p);
+                      OfflineStore.setActivePatientId(p.id);
+                      setCaregiverTab('patient_detail');
+                    }}
+                    onUnlinkPatient={(pId) => {
+                      setAllPatients(OfflineStore.getPatients());
+                      if (patient.id === pId) {
+                        const remaining = caregiverPatients.filter((p) => p.id !== pId);
+                        if (remaining.length > 0) {
+                          setPatient(remaining[0]);
+                        }
+                      }
+                    }}
+                    lang={lang}
+                    onLangChange={setLang}
+                    theme={theme}
+                    onToggleTheme={toggleTheme}
+                    highContrast={highContrast}
+                    onToggleHighContrast={() => setHighContrast(!highContrast)}
+                    textScale={textScale}
+                    onTextScaleChange={setTextScale}
+                    onLogout={() => setIsLogoutConfirmOpen(true)}
+                    onOpenVoicePack={() => setIsVoicePackModalOpen(true)}
+                  />
+                )}
               </div>
             )}
 
@@ -780,7 +949,7 @@ export default function App() {
       {/* Patient Bottom Navigation Bar (TRD Section 5 & 7: Simple navigation, predictable choice) */}
       {role === 'PATIENT' && !activeGame && (
         <nav
-          className="fixed bottom-0 inset-x-0 z-40 bg-[#FBF9F5]/98 border-t border-stone-200 backdrop-blur-md py-2 px-4 shadow-lg"
+          className="fixed bottom-0 inset-x-0 z-40 bg-[#FBF9F5]/98 dark:bg-[#161B22]/98 border-t border-stone-200 dark:border-stone-800 backdrop-blur-md py-2 px-4 shadow-lg transition-colors"
           aria-label="Patient Primary Navigation"
         >
           <div className="max-w-md mx-auto grid grid-cols-5 gap-1">
@@ -788,8 +957,8 @@ export default function App() {
               onClick={() => setPatientTab('home')}
               className={`flex flex-col items-center justify-center py-1.5 px-2 rounded-2xl transition ${
                 patientTab === 'home'
-                  ? 'text-teal-900 font-bold bg-teal-100/60'
-                  : 'text-stone-600 hover:text-stone-900'
+                  ? 'text-teal-900 dark:text-teal-300 font-bold bg-teal-100/60 dark:bg-teal-950/60'
+                  : 'text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200'
               }`}
             >
               <Home className="w-6 h-6 stroke-[2.2]" />
@@ -800,8 +969,8 @@ export default function App() {
               onClick={() => setPatientTab('activities')}
               className={`flex flex-col items-center justify-center py-1.5 px-2 rounded-2xl transition ${
                 patientTab === 'activities'
-                  ? 'text-teal-900 font-bold bg-teal-100/60'
-                  : 'text-stone-600 hover:text-stone-900'
+                  ? 'text-teal-900 dark:text-teal-300 font-bold bg-teal-100/60 dark:bg-teal-950/60'
+                  : 'text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200'
               }`}
             >
               <Sparkles className="w-6 h-6 stroke-[2.2]" />
@@ -812,8 +981,8 @@ export default function App() {
               onClick={() => setPatientTab('my_day')}
               className={`flex flex-col items-center justify-center py-1.5 px-2 rounded-2xl transition ${
                 patientTab === 'my_day'
-                  ? 'text-teal-900 font-bold bg-teal-100/60'
-                  : 'text-stone-600 hover:text-stone-900'
+                  ? 'text-teal-900 dark:text-teal-300 font-bold bg-teal-100/60 dark:bg-teal-950/60'
+                  : 'text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200'
               }`}
             >
               <Calendar className="w-6 h-6 stroke-[2.2]" />
@@ -824,8 +993,8 @@ export default function App() {
               onClick={() => setPatientTab('memories')}
               className={`flex flex-col items-center justify-center py-1.5 px-2 rounded-2xl transition ${
                 patientTab === 'memories'
-                  ? 'text-teal-900 font-bold bg-teal-100/60'
-                  : 'text-stone-600 hover:text-stone-900'
+                  ? 'text-teal-900 dark:text-teal-300 font-bold bg-teal-100/60 dark:bg-teal-950/60'
+                  : 'text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200'
               }`}
             >
               <Heart className="w-6 h-6 stroke-[2.2]" />
@@ -837,8 +1006,8 @@ export default function App() {
               onClick={() => setPatientTab('me')}
               className={`flex flex-col items-center justify-center py-1.5 px-2 rounded-2xl transition ${
                 patientTab === 'me' || patientTab === 'settings'
-                  ? 'text-teal-900 font-bold bg-teal-100/60'
-                  : 'text-stone-600 hover:text-stone-900'
+                  ? 'text-teal-900 dark:text-teal-300 font-bold bg-teal-100/60 dark:bg-teal-950/60'
+                  : 'text-stone-600 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200'
               }`}
             >
               <User className="w-6 h-6 stroke-[2.2]" />
@@ -875,15 +1044,6 @@ export default function App() {
         patient={patient}
         lang={lang}
         routineCount={routine.filter((r) => r.completed).length}
-      />
-
-      {/* Caregiver PIN Security Verification Gate */}
-      <CaregiverPinModal
-        isOpen={isCaregiverPinModalOpen}
-        onClose={() => setIsCaregiverPinModalOpen(false)}
-        onSuccess={handleCaregiverPinSuccess}
-        targetRoleName={pendingTargetRole === 'HEALTHCARE_WORKER' ? 'Health Worker Portal' : 'Caregiver Portal'}
-        lang={lang}
       />
 
       {/* Add / Register New Patient Modal */}

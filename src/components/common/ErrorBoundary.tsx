@@ -29,6 +29,13 @@ export class ErrorBoundary extends Component<Props, State> {
     console.error('CognitiveSaathi ErrorBoundary caught an unhandled error:', error, errorInfo);
   }
 
+  public componentDidUpdate(prevProps: Props) {
+    // If the view or children changed, automatically attempt recovery
+    if (this.state.hasError && (prevProps.children !== this.props.children || prevProps.fallbackTitle !== this.props.fallbackTitle)) {
+      this.setState({ hasError: false, error: null });
+    }
+  }
+
   private handleReset = () => {
     this.setState({ hasError: false, error: null });
     if (this.props.onReset) {
@@ -56,9 +63,9 @@ export class ErrorBoundary extends Component<Props, State> {
               </p>
             </div>
 
-            {this.state.error && process.env.NODE_ENV !== 'production' && (
+            {this.state.error && (
               <div className="text-left p-3 rounded-xl bg-stone-100 dark:bg-stone-900 border border-stone-300 dark:border-stone-700 text-[11px] font-mono text-stone-700 dark:text-stone-300 overflow-x-auto max-h-24">
-                {this.state.error.message}
+                <p className="font-semibold text-rose-700 dark:text-rose-400">{this.state.error.message || 'Unknown view error'}</p>
               </div>
             )}
 

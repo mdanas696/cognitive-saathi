@@ -151,10 +151,14 @@ export const CaregiverPatientDetail: React.FC<CaregiverPatientDetailProps> = ({
     setNewNote('');
   };
 
+  const safeRoutine = Array.isArray(routine) ? routine : [];
+  const safeSessions = Array.isArray(sessions) ? sessions : [];
+  const safeAllPatients = Array.isArray(allPatients) ? allPatients : [];
+
   return (
     <div className="space-y-8 animate-fadeIn max-w-7xl mx-auto">
       {/* Patient Switcher if multiple patients exist */}
-      {allPatients.length > 1 && (
+      {safeAllPatients.length > 1 && (
         <div className="flex flex-wrap items-center justify-between gap-3 p-4 rounded-2xl bg-stone-100 border border-stone-200">
           <div className="flex items-center gap-2 text-xs font-bold text-stone-700">
             <Users className="w-4 h-4 text-teal-800" />
@@ -317,10 +321,10 @@ export const CaregiverPatientDetail: React.FC<CaregiverPatientDetailProps> = ({
           </h3>
 
           <div className="space-y-2.5">
-            {routine.length === 0 ? (
+            {safeRoutine.length === 0 ? (
               <p className="text-xs text-stone-500 italic py-3">No routine tasks scheduled for today.</p>
             ) : (
-              routine.map((r) => (
+              safeRoutine.map((r) => (
                 <div
                   key={r.id}
                   className="flex items-center justify-between p-3 rounded-xl bg-stone-50 border border-stone-100 text-xs"
@@ -345,10 +349,10 @@ export const CaregiverPatientDetail: React.FC<CaregiverPatientDetailProps> = ({
           </h3>
 
           <div className="space-y-3">
-            {sessions.length === 0 ? (
+            {safeSessions.length === 0 ? (
               <p className="text-xs text-stone-500 italic py-3">No cognitive exercises completed yet today.</p>
             ) : (
-              sessions.map((s) => (
+              safeSessions.map((s) => (
                 <div
                   key={s.id}
                   className="p-4 rounded-2xl border border-stone-200 bg-stone-50/50 flex items-center justify-between"

@@ -557,8 +557,8 @@ export const CaregiverMeProfile: React.FC<CaregiverMeProfileProps> = ({
                 >
                   <div className="flex items-start gap-3">
                     <ElderAvatar
-                      gender={p.fullName.toLowerCase().includes('devi') || p.fullName.toLowerCase().includes('maya') || p.fullName.toLowerCase().includes('begum') ? 'female' : 'male'}
-                      state={p.state}
+                      name={p.fullName}
+                      genderHint={p.fullName.toLowerCase().includes('devi') || p.fullName.toLowerCase().includes('maya') || p.fullName.toLowerCase().includes('begum') ? 'female' : 'male'}
                       size="md"
                     />
                     <div className="min-w-0 flex-1">

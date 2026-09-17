@@ -88,12 +88,14 @@ export const CaregiverActivitiesView: React.FC<CaregiverActivitiesViewProps> = (
     (g) => selectedCategory === 'ALL' || g.category === selectedCategory
   );
 
+  const safeSessions = Array.isArray(sessions) ? sessions : [];
+
   // Stats calculation
-  const totalCompleted = sessions.length;
+  const totalCompleted = safeSessions.length;
   const avgAccuracy =
-    sessions.length > 0
+    safeSessions.length > 0
       ? Math.round(
-          (sessions.reduce((acc, s) => acc + s.accuracy, 0) / sessions.length) * 100
+          (safeSessions.reduce((acc, s) => acc + (s.accuracy || 0), 0) / safeSessions.length) * 100
         )
       : 88;
 
@@ -253,7 +255,7 @@ export const CaregiverActivitiesView: React.FC<CaregiverActivitiesViewProps> = (
       {/* Games List Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
         {filteredGames.map((game) => {
-          const gameSessions = sessions.filter((s) => s.gameId === game.id);
+          const gameSessions = safeSessions.filter((s) => s.gameId === game.id);
           const lastSession = gameSessions[0];
           const config = getGameConfig(game.id);
 

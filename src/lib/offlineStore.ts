@@ -592,6 +592,11 @@ export class OfflineStore {
   static setActivePatientId(id: string): void {
     try {
       localStorage.setItem(STORAGE_KEYS.ACTIVE_PATIENT_ID, id);
+      const session = this.getAuthSession();
+      if (session) {
+        session.patientId = id;
+        this.saveAuthSession(session);
+      }
     } catch (e) {
       console.warn('Local storage error:', e);
     }
@@ -1211,7 +1216,8 @@ export class OfflineStore {
       if (!pId) return [];
       const key = `${STORAGE_KEYS.ROUTINE}_${pId}`;
       const data = localStorage.getItem(key);
-      return data ? JSON.parse(data) : [];
+      const parsed = data ? JSON.parse(data) : [];
+      return Array.isArray(parsed) ? parsed : [];
     } catch {
       return [];
     }
@@ -1278,7 +1284,8 @@ export class OfflineStore {
       if (!pId) return [];
       const key = `${STORAGE_KEYS.REMINDERS}_${pId}`;
       const data = localStorage.getItem(key);
-      return data ? JSON.parse(data) : [];
+      const parsed = data ? JSON.parse(data) : [];
+      return Array.isArray(parsed) ? parsed : [];
     } catch {
       return [];
     }
@@ -1303,7 +1310,8 @@ export class OfflineStore {
       if (!pId) return [];
       const key = `${STORAGE_KEYS.MEMORIES}_${pId}`;
       const data = localStorage.getItem(key);
-      return data ? JSON.parse(data) : [];
+      const parsed = data ? JSON.parse(data) : [];
+      return Array.isArray(parsed) ? parsed : [];
     } catch {
       return [];
     }
@@ -1355,7 +1363,8 @@ export class OfflineStore {
       if (!pId) return [];
       const key = `${STORAGE_KEYS.SESSIONS}_${pId}`;
       const data = localStorage.getItem(key);
-      return data ? JSON.parse(data) : [];
+      const parsed = data ? JSON.parse(data) : [];
+      return Array.isArray(parsed) ? parsed : [];
     } catch {
       return [];
     }

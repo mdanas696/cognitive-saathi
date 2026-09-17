@@ -43,23 +43,23 @@ export const CaregiverReports: React.FC<CaregiverReportsProps> = ({
     const cached = OfflineStore.getAiReport(patient.id);
     if (cached) {
       setReport(cached);
-    } else if (sessions.length > 0) {
+    } else if (Array.isArray(sessions) && sessions.length > 0) {
       generateAiReport();
     }
-  }, [patient?.id, sessions.length]);
+  }, [patient?.id, sessions?.length]);
 
   // Real-time automatic synchronization (within 30 seconds)
   useEffect(() => {
     if (!patient?.id) return;
     const interval = setInterval(() => {
       const freshSessions = OfflineStore.getSessions(patient.id);
-      if (freshSessions.length > sessions.length) {
+      if (freshSessions.length > (sessions?.length || 0)) {
         generateAiReport();
       }
     }, 10000); // Poll every 10 seconds to ensure updates appear well within 30 seconds
 
     return () => clearInterval(interval);
-  }, [patient?.id, sessions.length]);
+  }, [patient?.id, sessions?.length]);
 
   const generateAiReport = async () => {
     setIsGenerating(true);
@@ -113,8 +113,12 @@ export const CaregiverReports: React.FC<CaregiverReportsProps> = ({
     );
   }
 
-  const completedReminders = reminders.filter((r) => r.completedToday).length;
-  const completedRoutine = routine.filter((r) => r.completed).length;
+  const safeReminders = Array.isArray(reminders) ? reminders : [];
+  const safeRoutine = Array.isArray(routine) ? routine : [];
+  const safeSessions = Array.isArray(sessions) ? sessions : [];
+
+  const completedReminders = safeReminders.filter((r) => r && r.completedToday).length;
+  const completedRoutine = safeRoutine.filter((r) => r && r.completed).length;
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 animate-fadeIn">
@@ -235,7 +239,7 @@ export const CaregiverReports: React.FC<CaregiverReportsProps> = ({
             </span>
             <div className="flex items-center justify-between">
               <span className="text-3xl font-bold font-serif-heading text-stone-900">
-                {completedRoutine} of {routine.length || 7}
+                {completedRoutine} of {safeRoutine.length || 7}
               </span>
               <CheckCircle2 className="w-5 h-5 text-teal-700" />
             </div>
@@ -248,7 +252,7 @@ export const CaregiverReports: React.FC<CaregiverReportsProps> = ({
             </span>
             <div className="flex items-center justify-between">
               <span className="text-3xl font-bold font-serif-heading text-emerald-700">
-                {completedReminders} of {reminders.length || 4}
+                {completedReminders} of {safeReminders.length || 4}
               </span>
               <Heart className="w-5 h-5 text-emerald-600" />
             </div>

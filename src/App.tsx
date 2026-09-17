@@ -69,6 +69,7 @@ import { AICaretakerCompanion } from './components/ai/AICaretakerCompanion';
 import { HealthcareDashboard } from './components/healthcare/HealthcareDashboard';
 import { AddPatientModal } from './components/caregiver/AddPatientModal';
 import { LogoutConfirmModal } from './components/common/LogoutConfirmModal';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { Bot, Lock } from 'lucide-react';
 const Analytics = () => null;
 
@@ -441,14 +442,19 @@ export default function App() {
     }
     const updatedPatients = OfflineStore.getPatients();
     setAllPatients(updatedPatients);
-    setPatient(newPatient);
-    OfflineStore.setActivePatientId(newPatient.id);
-    const patientRoutine = OfflineStore.getRoutine(newPatient.id);
-    setRoutine(patientRoutine);
-    const patientMemories = OfflineStore.getMemories(newPatient.id);
-    setMemories(patientMemories);
-    setReminders(OfflineStore.getReminders(newPatient.id));
-    setSessions(OfflineStore.getSessions(newPatient.id));
+    handleSelectPatient(newPatient);
+  };
+
+  const handleSelectPatient = (selectedP: PatientProfile) => {
+    if (!selectedP) return;
+    setPatient(selectedP);
+    if (selectedP.id) {
+      OfflineStore.setActivePatientId(selectedP.id);
+      setRoutine(OfflineStore.getRoutine(selectedP.id));
+      setMemories(OfflineStore.getMemories(selectedP.id));
+      setSessions(OfflineStore.getSessions(selectedP.id));
+      setReminders(OfflineStore.getReminders(selectedP.id));
+    }
   };
 
   const handleUpdatePatient = (updated: PatientProfile) => {
@@ -836,29 +842,23 @@ export default function App() {
                   </div>
                 </div>
 
-                {caregiverTab === 'dashboard' && (
-                  <CaregiverDashboard
-                    patient={patient}
-                    allPatients={caregiverPatients}
-                    onSelectPatient={(selectedP) => {
-                      setPatient(selectedP);
-                      OfflineStore.setActivePatientId(selectedP.id);
-                      setRoutine(OfflineStore.getRoutine(selectedP.id));
-                      setMemories(OfflineStore.getMemories(selectedP.id));
-                      setSessions(OfflineStore.getSessions(selectedP.id));
-                      setReminders(OfflineStore.getReminders(selectedP.id));
-                    }}
-                    onAddNewPatient={() => setIsAddPatientModalOpen(true)}
-                    onDeletePatient={handleDeletePatient}
-                    reminders={reminders}
-                    sessions={sessions}
-                    routine={routine}
-                    onUpdateRoutine={(newRoutine) => setRoutine(newRoutine)}
-                    lang={lang}
-                    onNavigateTab={(tab) => setCaregiverTab(tab as any)}
-                    caretaker={activeCaretaker}
-                  />
-                )}
+                <ErrorBoundary fallbackTitle="Caregiver Dashboard" onReset={() => setCaregiverTab('dashboard')}>
+                  {caregiverTab === 'dashboard' && (
+                    <CaregiverDashboard
+                      patient={patient}
+                      allPatients={caregiverPatients}
+                      onSelectPatient={handleSelectPatient}
+                      onAddNewPatient={() => setIsAddPatientModalOpen(true)}
+                      onDeletePatient={handleDeletePatient}
+                      reminders={reminders}
+                      sessions={sessions}
+                      routine={routine}
+                      onUpdateRoutine={(newRoutine) => setRoutine(newRoutine)}
+                      lang={lang}
+                      onNavigateTab={(tab) => setCaregiverTab(tab as any)}
+                      caretaker={activeCaretaker}
+                    />
+                  )}
 
                 {caregiverTab === 'activities' && (
                   <CaregiverActivitiesView
@@ -919,43 +919,36 @@ export default function App() {
                   />
                 )}
 
-                {caregiverTab === 'me' && (
-                  <CaregiverMeProfile
-                    caretaker={activeCaretaker}
-                    onUpdateCaretaker={(updated) => {
-                      setActiveCaretaker(updated);
-                    }}
-                    patients={caregiverPatients}
-                    activePatientId={patient.id}
-                    onSelectPatient={(selectedP) => {
-                      setPatient(selectedP);
-                      OfflineStore.setActivePatientId(selectedP.id);
-                      setRoutine(OfflineStore.getRoutine(selectedP.id));
-                      setReminders(OfflineStore.getReminders(selectedP.id));
-                      setMemories(OfflineStore.getMemories(selectedP.id));
-                      setSessions(OfflineStore.getSessions(selectedP.id));
-                    }}
-                    onOpenAddPatient={() => setIsAddPatientModalOpen(true)}
-                    onViewPatientDetail={(p) => {
-                      setPatient(p);
-                      OfflineStore.setActivePatientId(p.id);
-                      setCaregiverTab('patient_detail');
-                    }}
-                    onUnlinkPatient={(pId) => {
-                      handleDeletePatient(pId);
-                    }}
-                    lang={lang}
-                    onLangChange={setLang}
-                    theme={theme}
-                    onToggleTheme={toggleTheme}
-                    highContrast={highContrast}
-                    onToggleHighContrast={() => setHighContrast(!highContrast)}
-                    textScale={textScale}
-                    onTextScaleChange={setTextScale}
-                    onLogout={() => setIsLogoutConfirmOpen(true)}
-                    onOpenVoicePack={() => setIsVoicePackModalOpen(true)}
-                  />
-                )}
+                  {caregiverTab === 'me' && (
+                    <CaregiverMeProfile
+                      caretaker={activeCaretaker}
+                      onUpdateCaretaker={(updated) => {
+                        setActiveCaretaker(updated);
+                      }}
+                      patients={caregiverPatients}
+                      activePatientId={patient?.id || ''}
+                      onSelectPatient={handleSelectPatient}
+                      onOpenAddPatient={() => setIsAddPatientModalOpen(true)}
+                      onViewPatientDetail={(p) => {
+                        handleSelectPatient(p);
+                        setCaregiverTab('patient_detail');
+                      }}
+                      onUnlinkPatient={(pId) => {
+                        handleDeletePatient(pId);
+                      }}
+                      lang={lang}
+                      onLangChange={setLang}
+                      theme={theme}
+                      onToggleTheme={toggleTheme}
+                      highContrast={highContrast}
+                      onToggleHighContrast={() => setHighContrast(!highContrast)}
+                      textScale={textScale}
+                      onTextScaleChange={setTextScale}
+                      onLogout={() => setIsLogoutConfirmOpen(true)}
+                      onOpenVoicePack={() => setIsVoicePackModalOpen(true)}
+                    />
+                  )}
+                </ErrorBoundary>
               </div>
             )}
 

@@ -168,7 +168,14 @@ export const CaregiverDashboard: React.FC<CaregiverDashboardProps> = ({
     { category: 'Routine', score: 90 },
   ];
 
-  const completedReminders = reminders.filter((r) => r.completedToday).length;
+  const safeReminders = Array.isArray(reminders) ? reminders : [];
+  const safeSessions = Array.isArray(sessions) ? sessions : [];
+  const safeRoutine = Array.isArray(routine) ? routine : [];
+  const safePatients = Array.isArray(allPatients) ? allPatients : [];
+
+  const activeP = (patient && patient.fullName) ? patient : (safePatients.length > 0 ? safePatients[0] : null);
+
+  const completedReminders = safeReminders.filter((r) => r && r.completedToday).length;
 
   return (
     <div className="space-y-8 animate-fadeIn max-w-7xl mx-auto">
@@ -283,18 +290,18 @@ export const CaregiverDashboard: React.FC<CaregiverDashboardProps> = ({
             </div>
           </div>
 
-          {patient && patient.fullName ? (
+          {activeP && activeP.fullName ? (
             <div className="bg-teal-800/90 border border-teal-700 p-4 sm:p-5 rounded-2xl flex items-center gap-4 shrink-0 shadow-xs">
               <ElderAvatar
-                name={patient.preferredName || patient.fullName}
-                avatarUrl={patient.avatarUrl}
+                name={activeP.preferredName || activeP.fullName}
+                avatarUrl={activeP.avatarUrl}
                 size="lg"
                 className="border-2 border-amber-300 shadow-2xs shrink-0"
               />
               <div>
                 <span className="text-xs uppercase text-teal-300 font-semibold block">Active Patient</span>
-                <h3 className="text-base sm:text-lg font-bold text-white">{patient.fullName}, {patient.age}</h3>
-                <p className="text-xs text-teal-200">{patient.preferredName ? `(${patient.preferredName}) • ` : ''}{patient.region}</p>
+                <h3 className="text-base sm:text-lg font-bold text-white">{activeP.fullName}, {activeP.age}</h3>
+                <p className="text-xs text-teal-200">{activeP.preferredName ? `(${activeP.preferredName}) • ` : ''}{activeP.region}</p>
               </div>
             </div>
           ) : (
@@ -313,7 +320,7 @@ export const CaregiverDashboard: React.FC<CaregiverDashboardProps> = ({
       </div>
 
       {/* Clean Slate when no patients exist under care */}
-      {(!patient || !patient.fullName || !allPatients || allPatients.length === 0) ? (
+      {safePatients.length === 0 ? (
         <div className="bg-white dark:bg-[#1A222C] rounded-3xl border-2 border-dashed border-stone-300 dark:border-stone-700 p-8 sm:p-12 text-center space-y-6 shadow-xs">
           <div className="w-16 h-16 rounded-3xl bg-teal-50 dark:bg-teal-950/60 text-teal-800 dark:text-teal-300 flex items-center justify-center mx-auto shadow-xs">
             <Users className="w-8 h-8" />
@@ -351,12 +358,12 @@ export const CaregiverDashboard: React.FC<CaregiverDashboardProps> = ({
       ) : (
         <>
       {/* Patients Under Care Selector (Teacher & Students Model) */}
-      {allPatients && allPatients.length > 0 && (
+      {safePatients.length > 0 && (
         <div className="bg-white rounded-3xl border border-stone-200 p-5 shadow-xs space-y-3">
           <div className="flex items-center justify-between">
             <div>
               <h3 className="text-sm font-bold text-stone-900 uppercase tracking-wider">
-                Patients Under Your Care ({allPatients.length})
+                Patients Under Your Care ({safePatients.length})
               </h3>
               <p className="text-xs text-stone-500">
                 Select a patient to review their cognitive activity, adjust daily routines, and check reminders.
@@ -386,8 +393,8 @@ export const CaregiverDashboard: React.FC<CaregiverDashboardProps> = ({
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 pt-1">
-            {allPatients.map((p) => {
-              const isSelected = p.id === patient.id;
+            {safePatients.map((p) => {
+              const isSelected = activeP ? p.id === activeP.id : false;
               return (
                 <div
                   key={p.id}
@@ -521,7 +528,7 @@ export const CaregiverDashboard: React.FC<CaregiverDashboardProps> = ({
                 </span>
               </div>
               <p className="text-xs text-teal-200/90">
-                Ask evidence-based caregiving questions for {patient.preferredName || patient.fullName}.
+                Ask evidence-based caregiving questions for {activeP?.preferredName || activeP?.fullName || 'the elder'}.
               </p>
             </div>
           </div>
@@ -563,7 +570,7 @@ export const CaregiverDashboard: React.FC<CaregiverDashboardProps> = ({
             onKeyDown={(e) => {
               if (e.key === 'Enter') handleAskCoPilot();
             }}
-            placeholder={`Ask AI Co-Pilot any eldercare or clinical question about ${patient.preferredName}...`}
+            placeholder={`Ask AI Co-Pilot any eldercare or clinical question about ${activeP?.preferredName || activeP?.fullName || 'the elder'}...`}
             className="flex-1 bg-teal-950/70 border border-teal-700 text-teal-50 placeholder:text-teal-400/70 rounded-xl px-4 py-3 text-xs focus:outline-none focus:ring-2 focus:ring-amber-400"
           />
           <button
@@ -600,7 +607,7 @@ export const CaregiverDashboard: React.FC<CaregiverDashboardProps> = ({
               Caregiver Feature Modules
             </h3>
             <p className="text-xs text-stone-500">
-              Dedicated tools and schedules for {patient.preferredName || patient.fullName}
+              Dedicated tools and schedules for {activeP?.preferredName || activeP?.fullName || 'the elder'}
             </p>
           </div>
           <span className="text-xs font-semibold text-teal-800 bg-teal-50 px-2.5 py-1 rounded-full border border-teal-100">
@@ -626,7 +633,7 @@ export const CaregiverDashboard: React.FC<CaregiverDashboardProps> = ({
                 Daily Routines
               </h4>
               <p className="text-xs text-stone-500 line-clamp-2 mt-0.5">
-                {routine.length} structured daily steps for wake-up, namaz/puja, walks & rest.
+                {safeRoutine.length} structured daily steps for wake-up, namaz/puja, walks & rest.
               </p>
             </div>
             <div className="text-[11px] font-bold text-teal-700 pt-1">
@@ -651,7 +658,7 @@ export const CaregiverDashboard: React.FC<CaregiverDashboardProps> = ({
                 Medications & Alerts
               </h4>
               <p className="text-xs text-stone-500 line-clamp-2 mt-0.5">
-                {completedReminders} of {reminders.length} doses confirmed. Set voice alerts & hydration.
+                {completedReminders} of {safeReminders.length} doses confirmed. Set voice alerts & hydration.
               </p>
             </div>
             <div className="text-[11px] font-bold text-emerald-700 pt-1">
@@ -741,7 +748,7 @@ export const CaregiverDashboard: React.FC<CaregiverDashboardProps> = ({
         <div className="p-5 rounded-3xl bg-white border border-stone-200 shadow-xs space-y-2">
           <span className="text-xs font-bold uppercase tracking-wider text-stone-500">Daily Streak</span>
           <div className="flex items-center justify-between">
-            <span className="text-3xl font-bold font-serif-heading text-stone-900">{patient.dailyStreak} Days</span>
+            <span className="text-3xl font-bold font-serif-heading text-stone-900">{activeP?.dailyStreak ?? 0} Days</span>
             <div className="p-2.5 rounded-xl bg-amber-50 text-amber-600">
               <Sparkles className="w-5 h-5" />
             </div>
@@ -752,7 +759,7 @@ export const CaregiverDashboard: React.FC<CaregiverDashboardProps> = ({
         <div className="p-5 rounded-3xl bg-white border border-stone-200 shadow-xs space-y-2">
           <span className="text-xs font-bold uppercase tracking-wider text-stone-500">Today's Activities</span>
           <div className="flex items-center justify-between">
-            <span className="text-3xl font-bold font-serif-heading text-stone-900">{patient.todayCompletedCount} Completed</span>
+            <span className="text-3xl font-bold font-serif-heading text-stone-900">{activeP?.todayCompletedCount ?? 0} Completed</span>
             <div className="p-2.5 rounded-xl bg-teal-50 text-teal-700">
               <CheckCircle2 className="w-5 h-5" />
             </div>
@@ -763,7 +770,7 @@ export const CaregiverDashboard: React.FC<CaregiverDashboardProps> = ({
         <div className="p-5 rounded-3xl bg-white border border-stone-200 shadow-xs space-y-2">
           <span className="text-xs font-bold uppercase tracking-wider text-stone-500">Reminder Adherence</span>
           <div className="flex items-center justify-between">
-            <span className="text-3xl font-bold font-serif-heading text-stone-900">{completedReminders} of {reminders.length}</span>
+            <span className="text-3xl font-bold font-serif-heading text-stone-900">{completedReminders} of {safeReminders.length}</span>
             <div className="p-2.5 rounded-xl bg-emerald-50 text-emerald-700">
               <Heart className="w-5 h-5" />
             </div>
@@ -867,7 +874,7 @@ export const CaregiverDashboard: React.FC<CaregiverDashboardProps> = ({
                 <span>Morning Medication Confirmed</span>
               </div>
               <p className="text-xs text-stone-700">
-                {patient.preferredName} marked morning BP medicine taken at 08:15 AM after red tea.
+                {activeP?.preferredName || activeP?.fullName || 'Patient'} marked morning BP medicine taken at 08:15 AM after red tea.
               </p>
               <span className="text-[11px] text-stone-500 block pt-1">Today, 08:16 AM</span>
             </div>
@@ -922,18 +929,18 @@ export const CaregiverDashboard: React.FC<CaregiverDashboardProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100">
-                {sessions.slice(0, 5).map((s) => (
+                {safeSessions.slice(0, 5).map((s) => (
                   <tr key={s.id} className="hover:bg-stone-50/70 transition">
                     <td className="py-3 px-3 font-semibold text-stone-900 capitalize">
-                      {s.gameId.replace('-', ' ')}
+                      {s.gameId ? s.gameId.replace('-', ' ') : 'Exercise'}
                     </td>
                     <td className="py-3 px-3">
                       <span className="inline-block px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-800 font-bold">
-                        {Math.round(s.accuracy * 100)}%
+                        {Math.round((s.accuracy ?? 0) * 100)}%
                       </span>
                     </td>
-                    <td className="py-3 px-3">{Math.round(s.completionTimeMs / 1000)}s</td>
-                    <td className="py-3 px-3 text-stone-500">{s.completedAt}</td>
+                    <td className="py-3 px-3">{Math.round((s.completionTimeMs ?? 0) / 1000)}s</td>
+                    <td className="py-3 px-3 text-stone-500">{s.completedAt || 'Recently'}</td>
                     <td className="py-3 px-3">
                       <span className="inline-flex items-center gap-1 text-teal-800">
                         <CheckCircle2 className="w-3.5 h-3.5 text-teal-600" />

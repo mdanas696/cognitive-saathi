@@ -41,7 +41,7 @@ export interface GameDefinition {
 
 export interface GameSessionResult {
   id: string;
-  gameId: GameId;
+  gameId: GameId | string;
   patientId: string;
   difficulty: number;
   accuracy: number; // 0.0 to 1.0
@@ -125,7 +125,7 @@ export interface PatientProfile {
   linkedCaregiverKey?: string;
   age: number;
   region: string;
-  state: 'Assam' | 'Manipur' | 'Meghalaya' | 'Nagaland' | 'Tripura' | 'Arunachal Pradesh' | 'Mizoram' | 'Sikkim';
+  state: 'Assam' | 'Manipur' | 'Meghalaya' | 'Nagaland' | 'Tripura' | 'Arunachal Pradesh' | 'Mizoram' | 'Sikkim' | string;
   preferredLanguage: LanguageCode;
   fallbackLanguage?: LanguageCode;
   caregiverName: string;

@@ -47,7 +47,7 @@ app.post('/api/ai/companion', async (req, res) => {
   try {
     const {
       message,
-      patientName = 'Aita',
+      patientName = 'Senior Companion',
       preferredLanguage = 'en',
       role = 'PATIENT',
       context = {},
@@ -147,7 +147,7 @@ app.post('/api/ai/daily-report', async (req, res) => {
       date = new Date().toLocaleDateString(),
     } = req.body;
 
-    const patientName = patient?.fullName || 'Anima Devi';
+    const patientName = patient?.fullName || 'Senior Member';
     const patientAge = patient?.age || 72;
     const completedRoutineCount = routine.filter((r: any) => r.completed).length;
     const totalRoutineCount = routine.length || 7;

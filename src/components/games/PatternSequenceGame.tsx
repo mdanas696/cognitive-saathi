@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Sparkles, CheckCircle2, HelpCircle } from 'lucide-react';
 import { LanguageCode } from '../../types';
+import { AudioInstructionBanner } from '../common/AudioInstructionBanner';
 
 interface PatternSequenceGameProps {
   difficulty: number;
@@ -24,6 +25,7 @@ const SYMBOLS: PatternSymbol[] = [
 
 export const PatternSequenceGame: React.FC<PatternSequenceGameProps> = ({
   difficulty,
+  lang,
   onComplete,
 }) => {
   const [startTime] = useState<number>(Date.now());
@@ -71,6 +73,14 @@ export const PatternSequenceGame: React.FC<PatternSequenceGameProps> = ({
 
   return (
     <div className="space-y-6 max-w-2xl mx-auto animate-fadeIn">
+      {/* Audio Instruction */}
+      <AudioInstructionBanner
+        instructionKey={mistakes > 0 ? 'instruction_try_again' : 'instruction_continue'}
+        lang={lang}
+        fallbackText="Look at the symbols in sequence and tap the one that fits next."
+        autoPlayOnMount={false}
+      />
+
       <div className="p-4 bg-teal-50 rounded-2xl border border-teal-200 text-center">
         <span className="text-xs font-bold uppercase text-teal-800 tracking-wider">
           Exercise {step} of {totalSteps}

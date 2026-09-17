@@ -19,7 +19,10 @@ import {
   Bell,
   Trash2,
   X,
+  KeyRound,
+  Copy,
 } from 'lucide-react';
+import { LinkPatientKeyModal } from './LinkPatientKeyModal';
 import {
   ResponsiveContainer,
   BarChart,
@@ -67,6 +70,8 @@ export const CaregiverDashboard: React.FC<CaregiverDashboardProps> = ({
 }) => {
   const t = translations[lang];
   const [patientToDelete, setPatientToDelete] = useState<PatientProfile | null>(null);
+  const [isLinkKeyModalOpen, setIsLinkKeyModalOpen] = useState(false);
+  const [copiedKey, setCopiedKey] = useState(false);
 
   // AI Co-Pilot state for caregiver
   const [coPilotQuestion, setCoPilotQuestion] = useState('');
@@ -150,6 +155,38 @@ export const CaregiverDashboard: React.FC<CaregiverDashboardProps> = ({
             <p className="text-teal-100/90 text-sm max-w-2xl leading-relaxed">
               {t.caregiverOverviewSubtitle}
             </p>
+
+            {/* Caregiver Unique Key badge */}
+            <div className="flex flex-wrap items-center gap-2.5 pt-2">
+              <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-xl bg-teal-800 border border-teal-600/70 text-amber-300 font-mono text-xs font-bold shadow-inner">
+                <KeyRound className="w-4 h-4 text-amber-400 shrink-0" />
+                <span>Your Caregiver Key: {caretaker?.caregiverKey || 'CG-CARE88'}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  navigator.clipboard.writeText(caretaker?.caregiverKey || 'CG-CARE88');
+                  setCopiedKey(true);
+                  setTimeout(() => setCopiedKey(false), 2000);
+                }}
+                className="px-3 py-1.5 rounded-xl bg-teal-700/80 hover:bg-teal-600 text-white text-xs font-bold transition flex items-center gap-1.5 cursor-pointer shadow-xs"
+              >
+                {copiedKey ? (
+                  <>
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-300" />
+                    <span>Copied!</span>
+                  </>
+                ) : (
+                  <>
+                    <Copy className="w-3.5 h-3.5 text-teal-200" />
+                    <span>Copy Key for Patient</span>
+                  </>
+                )}
+              </button>
+              <span className="text-[11px] text-teal-200/90 hidden sm:inline">
+                Give this key to your patient so they can connect with you.
+              </span>
+            </div>
           </div>
 
           <div className="bg-teal-800/90 border border-teal-700 p-4 sm:p-5 rounded-2xl flex items-center gap-4 shrink-0 shadow-xs">
@@ -180,16 +217,27 @@ export const CaregiverDashboard: React.FC<CaregiverDashboardProps> = ({
                 Select a patient to review their cognitive activity, adjust daily routines, and check reminders.
               </p>
             </div>
-            {onAddNewPatient && (
+            <div className="flex items-center gap-2">
               <button
                 type="button"
-                onClick={onAddNewPatient}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-800 text-xs font-bold transition"
+                onClick={() => setIsLinkKeyModalOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-800 text-amber-300 hover:bg-teal-900 text-xs font-bold transition shadow-2xs"
+                title="Link patient using their unique Caregiver Key"
               >
-                <Plus className="w-3.5 h-3.5" />
-                <span>+ Register Patient</span>
+                <KeyRound className="w-3.5 h-3.5" />
+                <span>+ Link with Key</span>
               </button>
-            )}
+              {onAddNewPatient && (
+                <button
+                  type="button"
+                  onClick={onAddNewPatient}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-800 text-xs font-bold transition"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>+ Register Patient</span>
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 pt-1">
@@ -347,7 +395,7 @@ export const CaregiverDashboard: React.FC<CaregiverDashboardProps> = ({
           <span className="text-[11px] font-bold text-teal-300 uppercase shrink-0">Quick Ask:</span>
           {[
             'How can I ease evening sundowning?',
-            'Suggest memory stimulation activities for Aita',
+            'Suggest memory stimulation activities for elder',
             'Evaluate today’s routine adherence and focus',
             'What hydration schedule works best for elders with dementia?',
           ].map((prompt, idx) => (
@@ -762,6 +810,18 @@ export const CaregiverDashboard: React.FC<CaregiverDashboardProps> = ({
           {t.clinicalNotice}
         </p>
       </div>
+
+      {/* Link Patient by Caregiver Key Modal */}
+      <LinkPatientKeyModal
+        isOpen={isLinkKeyModalOpen}
+        onClose={() => setIsLinkKeyModalOpen(false)}
+        caretakerId={caretaker?.id}
+        onPatientLinked={(linkedPatient) => {
+          if (onSelectPatient) {
+            onSelectPatient(linkedPatient);
+          }
+        }}
+      />
     </div>
   );
 };

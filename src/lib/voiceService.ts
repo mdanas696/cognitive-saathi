@@ -186,6 +186,6 @@ export class VoiceService {
       return 'I am CognitiveSaathi, your gentle companion. I am here to help you remember your daily routine and keep your mind active and calm.';
     }
 
-    return 'Everything is peaceful and well, Anima. Your routine is right on time, and your family is near.';
+    return 'Everything is peaceful and well. Your routine is right on time, and your support network is near.';
   }
 }

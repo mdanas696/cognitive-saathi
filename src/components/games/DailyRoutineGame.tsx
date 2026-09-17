@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { CheckCircle2, Coffee, Pill, Footprints, Clock } from 'lucide-react';
 import { LanguageCode } from '../../types';
+import { AudioInstructionBanner } from '../common/AudioInstructionBanner';
 
 interface DailyRoutineGameProps {
   difficulty: number;
@@ -10,6 +11,7 @@ interface DailyRoutineGameProps {
 
 export const DailyRoutineGame: React.FC<DailyRoutineGameProps> = ({
   difficulty,
+  lang,
   onComplete,
 }) => {
   const [startTime] = useState<number>(Date.now());
@@ -55,6 +57,20 @@ export const DailyRoutineGame: React.FC<DailyRoutineGameProps> = ({
 
   return (
     <div className="space-y-6 max-w-xl mx-auto animate-fadeIn">
+      {/* Audio-First Instruction */}
+      <AudioInstructionBanner
+        instructionKey={
+          mistakes > 0
+            ? 'instruction_try_again'
+            : currentQuestion === 0
+            ? 'instruction_medicine_time'
+            : 'instruction_continue'
+        }
+        lang={lang}
+        fallbackText={q.prompt}
+        autoPlayOnMount={false}
+      />
+
       <div className="p-4 bg-teal-50 rounded-2xl border border-teal-200 text-center">
         <span className="text-xs font-bold uppercase text-teal-800 tracking-wider">
           Routine Step {currentQuestion + 1} of {questions.length}

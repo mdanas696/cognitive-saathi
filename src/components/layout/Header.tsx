@@ -35,7 +35,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenVoice,
   textScale,
   onTextScaleChange,
-  patientName = 'Anima Devi',
+  patientName = 'Ramesh Sharma',
   onLogout,
   onRequestUnlockCaregiver,
   onOpenDashboard,

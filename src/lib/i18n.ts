@@ -113,6 +113,40 @@ export interface Translations {
   observationNotes: string;
   addReminder: string;
   clinicalNotice: string;
+
+  // Games & Activities
+  categoryLabel: string;
+  elderlyFriendlyTip: string;
+  gameFindMatchingTitle: string;
+  gameFindMatchingDesc: string;
+  gameFindMatchingTag: string;
+  gameFindMatchingCategory: string;
+  gameAttentionTitle: string;
+  gameAttentionDesc: string;
+  gameAttentionTag: string;
+  gameAttentionCategory: string;
+  gamePatternTitle: string;
+  gamePatternDesc: string;
+  gamePatternTag: string;
+  gamePatternCategory: string;
+  gameRoutineTitle: string;
+  gameRoutineDesc: string;
+  gameRoutineTag: string;
+  gameRoutineCategory: string;
+  gameObjectTitle: string;
+  gameObjectDesc: string;
+  gameObjectTag: string;
+  gameObjectCategory: string;
+
+  // Audio-First Instructions
+  instructionFindCup: string;
+  instructionTryAgain: string;
+  instructionWellDone: string;
+  instructionMedicineTime: string;
+  instructionContinue: string;
+  listenAudio: string;
+  replayAudio: string;
+  navLanguagePacks: string;
 }
 
 export const translations: Record<LanguageCode, Translations> = {
@@ -163,7 +197,7 @@ export const translations: Record<LanguageCode, Translations> = {
     viewRoutine: "View Today's Routine",
     whoAmI: 'You are in a safe, familiar place with your family companion.',
     everythingOkay: 'Everything is peaceful and well.',
-    everythingOkaySub: 'Your caregiver Animesh is nearby and your daily routine is on track.',
+    everythingOkaySub: 'Your caregiver is nearby and your daily routine is on track.',
 
     activitiesTitle: 'Cognitive & Memory Activities',
     activitiesSubtitle: 'Comfortable, non-stressful exercises designed for memory, recognition, and daily ease.',
@@ -218,6 +252,38 @@ export const translations: Record<LanguageCode, Translations> = {
     observationNotes: 'Caregiver Observations',
     addReminder: 'Schedule Reminder',
     clinicalNotice: 'Non-diagnostic notice: CognitiveSaathi indicators track cognitive activity adherence and comfort patterns. They do not constitute a clinical diagnosis or treatment prescription.',
+
+    categoryLabel: 'Category',
+    elderlyFriendlyTip: 'Gentle, pressure-free exercise designed for familiar cognitive engagement.',
+    gameFindMatchingTitle: 'Gentle Pattern & Motif Recall',
+    gameFindMatchingDesc: 'Recognize matching traditional weaving and heritage patterns.',
+    gameFindMatchingTag: 'Heritage & Textiles',
+    gameFindMatchingCategory: 'Pattern Recognition',
+    gameAttentionTitle: 'Calm Tea Garden Observation',
+    gameAttentionDesc: 'Notice gentle details and familiar nature elements without time limits.',
+    gameAttentionTag: 'Daily Life & Nature',
+    gameAttentionCategory: 'Sustained Attention',
+    gamePatternTitle: 'Traditional Rhythm Sequence',
+    gamePatternDesc: 'Follow simple sequences inspired by traditional musical beats and patterns.',
+    gamePatternTag: 'Folk Rhythms & Sound',
+    gamePatternCategory: 'Sequential Memory',
+    gameRoutineTitle: 'Familiar Morning Steps',
+    gameRoutineDesc: 'Gently order daily habits like tea time, bathing, and medicine.',
+    gameRoutineTag: 'Daily Independence',
+    gameRoutineCategory: 'Executive Function',
+    gameObjectTitle: 'Everyday Household Objects',
+    gameObjectDesc: 'Connect names and uses for traditional utensils, prayer items, and tools.',
+    gameObjectTag: 'Familiar Living',
+    gameObjectCategory: 'Semantic Memory',
+
+    instructionFindCup: 'Find the matching cup.',
+    instructionTryAgain: "Let's try again.",
+    instructionWellDone: 'Well done.',
+    instructionMedicineTime: 'Time for your medicine.',
+    instructionContinue: 'Would you like to continue?',
+    listenAudio: 'Listen',
+    replayAudio: 'Replay',
+    navLanguagePacks: 'Language & Voice',
   },
 
   as: {
@@ -322,6 +388,38 @@ export const translations: Record<LanguageCode, Translations> = {
     observationNotes: 'যত্নকাৰীৰ টোকা',
     addReminder: 'নতুন সোঁৱৰণী যোগ কৰক',
     clinicalNotice: 'সতৰ্কতা: কগনিটিভসাথীৰ সূচকসমূহ কেৱল দৈনন্দিন মননশীল অংশগ্ৰহণ জুখিবৰ বাবে। ই কোনো ডাক্তৰী নিদান বা ঔষধৰ বিকল্প নহয়।',
+
+    categoryLabel: 'বিভাগ',
+    elderlyFriendlyTip: 'মানসিক চাপহীন, চিনাকি আৰু আৰামদায়ক স্মৃতিৰ অনুশীলন।',
+    gameFindMatchingTitle: 'চিনাকি ফুল আৰু বস্ত্ৰ চিনেকি খেল',
+    gameFindMatchingDesc: 'অসমৰ তাঁতশাল আৰু পৰম্পৰাগত ফুল-জালৰ চিনাকি ৰূপ মিলাওক।',
+    gameFindMatchingTag: 'ঐতিহ্য আৰু শিপিনীৰ চিনাকি',
+    gameFindMatchingCategory: 'ৰূপ চিনাৰ ক্ষমতা',
+    gameAttentionTitle: 'চাহ বাগিচাৰ শান্ত নিৰীক্ষণ',
+    gameAttentionDesc: 'প্ৰকৃতি আৰু ঘৰুৱা পৰিৱেশৰ চিনাকি বস্তুৰ ওপৰত শান্তভাৱে দৃষ্টি দিয়ক।',
+    gameAttentionTag: 'প্ৰকৃতি আৰু চিনাকি জীৱন',
+    gameAttentionCategory: 'মনোযোগ আৰু একাগ্ৰতা',
+    gamePatternTitle: 'ঐতিহ্যবাহী সুৰ আৰু ছন্দৰ ক্ৰম',
+    gamePatternDesc: 'ঢোল, পেঁপা আৰু পৰম্পৰাগত তালৰ সহজ আৰু চিনাকি ক্ৰম অনুসৰণ কৰক।',
+    gamePatternTag: 'লোক সংস্কৃতি আৰু সুৰ',
+    gamePatternCategory: 'ক্ৰম স্মৃতি',
+    gameRoutineTitle: 'ৰাতিপুৱাৰ চিনাকি নিয়ম',
+    gameRoutineDesc: 'চাহ খোৱা, গা-ধোৱা আৰু ঔষধ খোৱাৰ দৰে সহজ নিয়মবোৰ সঠিক ক্ৰমত সজাওক।',
+    gameRoutineTag: 'দৈনন্দিন অভ্যাস',
+    gameRoutineCategory: 'দৈনিক পৰিচালনা',
+    gameObjectTitle: 'ঘৰুৱা চিনাকি সামগ্ৰী',
+    gameObjectDesc: 'শৰাই, জাপি, ঘটি আদি পুৰণি চিনাকি সামগ্ৰীৰ নাম আৰু ব্যৱহাৰ মনত পেলাওক।',
+    gameObjectTag: 'ঘৰুৱা চিনাকি জীৱন',
+    gameObjectCategory: 'শব্দ আৰু বস্তুৰ স্মৃতি',
+
+    instructionFindCup: 'মিলা কাপটো বিচাৰি উলিয়াওক।',
+    instructionTryAgain: 'আহক, আৰু এবাৰ চেষ্টা কৰোঁ।',
+    instructionWellDone: 'বৰ সুন্দৰ হৈছে।',
+    instructionMedicineTime: 'আপোনাৰ ঔষধ খোৱাৰ সময় হৈছে।',
+    instructionContinue: 'আপুনি আৰু আগবাঢ়িব বিচাৰেনে?',
+    listenAudio: 'শুনক',
+    replayAudio: 'পুনৰ শুনক',
+    navLanguagePacks: 'ভাষা আৰু মাতৰ নিয়ন্ত্ৰণ',
   },
 
   hi: {
@@ -426,6 +524,38 @@ export const translations: Record<LanguageCode, Translations> = {
     observationNotes: 'केयरगिवर नोट्स',
     addReminder: 'नया रिमाइंडर जोड़ें',
     clinicalNotice: 'अस्वीकरण: कॉग्निटिवसाथी के आंकड़े केवल गतिविधि सहभागिता दर्शाते हैं। यह कोई चिकित्सीय निदान या उपचार सलाह नहीं है।',
+
+    categoryLabel: 'श्रेणी',
+    elderlyFriendlyTip: 'तनावमुक्त, सहज और परिचित अभ्यास जो स्मृति को सहयोग देते हैं।',
+    gameFindMatchingTitle: 'पारंपरिक वस्त्र व पैटर्न पहचान',
+    gameFindMatchingDesc: 'पारंपरिक बुनाई और धरोहर के मिलते-जुलते डिजाइनों को पहचानें।',
+    gameFindMatchingTag: 'धरोहर व वस्त्र',
+    gameFindMatchingCategory: 'पैटर्न पहचान',
+    gameAttentionTitle: 'शांत चाय बागान अवलोकन',
+    gameAttentionDesc: 'बिना किसी समय सीमा के प्रकृति और परिचित वस्तुओं को ध्यान से देखें।',
+    gameAttentionTag: 'दैनिक जीवन व प्रकृति',
+    gameAttentionCategory: 'सतत एकाग्रता',
+    gamePatternTitle: 'पारंपरिक संगीत व ताल क्रम',
+    gamePatternDesc: 'पारंपरिक लोक धुनों और आसान लयबद्ध क्रमों का अनुसरण करें।',
+    gamePatternTag: 'लोक संगीत व ताल',
+    gamePatternCategory: 'क्रमबद्ध स्मृति',
+    gameRoutineTitle: 'सुबह की परिचित दिनचर्या',
+    gameRoutineDesc: 'चाय, स्नान और दवाइयों जैसे सरल दैनिक चरणों को सही क्रम में लगाएं।',
+    gameRoutineTag: 'दैनिक स्वावलंबन',
+    gameRoutineCategory: 'दैनिक प्रबंधन',
+    gameObjectTitle: 'दैनिक घरेलू वस्तुएं',
+    gameObjectDesc: 'पारंपरिक बर्तनों, पूजा सामग्री और औजारों के नाम व उपयोग याद करें।',
+    gameObjectTag: 'घरेलू जीवन',
+    gameObjectCategory: 'शब्द व वस्तु स्मृति',
+
+    instructionFindCup: 'मिलता-जुलता कप खोजें।',
+    instructionTryAgain: 'आइए फिर प्रयास करें।',
+    instructionWellDone: 'बहुत बढ़िया।',
+    instructionMedicineTime: 'आपकी दवाई का समय हो गया है।',
+    instructionContinue: 'क्या आप आगे बढ़ना चाहेंगे?',
+    listenAudio: 'सुनें',
+    replayAudio: 'पुनः सुनें',
+    navLanguagePacks: 'भाषा व आवाज प्रबंधन',
   },
 
   mni: {
@@ -530,5 +660,99 @@ export const translations: Record<LanguageCode, Translations> = {
     observationNotes: 'কেয়ারগিভারগী নোতস',
     addReminder: 'অনৌবা নীংশিংবা হাপ্পু',
     clinicalNotice: 'সতর্কতা: কোগ্নিটিভসাথীগী রেকোর্দ অসি লাইয়েক নত্তে, মসি অহলশিংগী ৱাখলবু নুংঙাইহন্নবগীদমক খক্তনি।',
+
+    categoryLabel: 'মখল',
+    elderlyFriendlyTip: 'ৱাখল নুংঙাইনবা অমসুং নীংশিংবা ফগৎহন্নবা শান্নবা।',
+    gameFindMatchingTitle: 'চৎনবীগী ফিজোল অমসুং শক্তম',
+    gameFindMatchingDesc: 'মণিপুরগী ফি অমসুং চৎনবীগী মান্নবা শক্তমশিং থিদোকউ।',
+    gameFindMatchingTag: 'নাৎ অমসুং ফিজোল',
+    gameFindMatchingCategory: 'প্যাটার্ন খঙদোকপা',
+    gameAttentionTitle: 'চাহ পাম্বীগী শান্ত নিৰীক্ষণ',
+    gameAttentionDesc: 'মতমগী চৈথেং য়াওদনা মহৌশাগী অমসুং মশক খঙবা পোৎলমশিং য়েংউ।',
+    gameAttentionTag: 'মহৌশা অমসুং পুন্সি',
+    gameAttentionCategory: 'মীৎয়েং থম্বা',
+    gamePatternTitle: 'চৎনবীগী খোন্থোক অমসুং ঈশৈ',
+    gamePatternDesc: 'পুং অমসুং চৎনবীগী লাইরবা খোন্থোক্কী ক্ৰম অসি ইনউ।',
+    gamePatternTag: 'নাৎ অমসুং ঈশৈ',
+    gamePatternCategory: 'ক্ৰম নীংশিংবা',
+    gameRoutineTitle: 'অয়ুক্কী চৎনবীগী থবক',
+    gameRoutineDesc: 'চাহ থকপা, ঈরুবা অমসুং হিদাক চাবগী থবকশিং মথং-মনাও শেমজিনউ।',
+    gameRoutineTag: 'নুমিৎ খুদিংগী থবক',
+    gameRoutineCategory: 'রুতিন শেম-শাবা',
+    gameObjectTitle: 'য়ুমগী পোৎলমশিং',
+    gameObjectDesc: 'পুৰাণগী থারি, পোৎলম অমসুং শীজিন্নবা পোৎলমগী মমিং নীংশিংউ।',
+    gameObjectTag: 'য়ুমগী পুন্সি',
+    gameObjectCategory: 'ৱাহৈ অমসুং পোৎলম নীংশিংবা',
+
+    instructionFindCup: 'মান্নবা খোই বিয়ু।',
+    instructionTryAgain: 'অমুক হন্না হোৎনসি।',
+    instructionWellDone: 'য়াম্না ফরে।',
+    instructionMedicineTime: 'হিদাক চাবগী মতম ওইরে।',
+    instructionContinue: 'মখা চত্থবা পাম্বিব্রা?',
+    listenAudio: 'তাবিযু',
+    replayAudio: 'অমুক হন্না তাবিযু',
+    navLanguagePacks: 'লোন অমসুং খোন',
   },
 };
+
+/**
+ * Universal Game Localizer
+ * Ensures game title, description, cultural tag, and category match the active language.
+ */
+export function getGameTranslation(
+  gameId: string,
+  lang: LanguageCode
+): {
+  title: string;
+  shortDescription: string;
+  culturalTag: string;
+  category: string;
+} {
+  const t = translations[lang] || translations.en;
+
+  switch (gameId) {
+    case 'find-matching':
+      return {
+        title: t.gameFindMatchingTitle,
+        shortDescription: t.gameFindMatchingDesc,
+        culturalTag: t.gameFindMatchingTag,
+        category: t.gameFindMatchingCategory,
+      };
+    case 'spot-difference':
+      return {
+        title: t.gameAttentionTitle,
+        shortDescription: t.gameAttentionDesc,
+        culturalTag: t.gameAttentionTag,
+        category: t.gameAttentionCategory,
+      };
+    case 'pattern-recall':
+      return {
+        title: t.gamePatternTitle,
+        shortDescription: t.gamePatternDesc,
+        culturalTag: t.gamePatternTag,
+        category: t.gamePatternCategory,
+      };
+    case 'daily-routine':
+      return {
+        title: t.gameRoutineTitle,
+        shortDescription: t.gameRoutineDesc,
+        culturalTag: t.gameRoutineTag,
+        category: t.gameRoutineCategory,
+      };
+    case 'object-naming':
+      return {
+        title: t.gameObjectTitle,
+        shortDescription: t.gameObjectDesc,
+        culturalTag: t.gameObjectTag,
+        category: t.gameObjectCategory,
+      };
+    default:
+      return {
+        title: t.gameFindMatchingTitle,
+        shortDescription: t.gameFindMatchingDesc,
+        culturalTag: t.gameFindMatchingTag,
+        category: t.gameFindMatchingCategory,
+      };
+  }
+}
+

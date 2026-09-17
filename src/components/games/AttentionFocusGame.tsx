@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Sparkles, Check } from 'lucide-react';
 import { LanguageCode } from '../../types';
+import { AudioInstructionBanner } from '../common/AudioInstructionBanner';
 
 interface AttentionFocusGameProps {
   difficulty: number;
@@ -10,6 +11,7 @@ interface AttentionFocusGameProps {
 
 export const AttentionFocusGame: React.FC<AttentionFocusGameProps> = ({
   difficulty,
+  lang,
   onComplete,
 }) => {
   const [startTime] = useState<number>(Date.now());
@@ -47,6 +49,20 @@ export const AttentionFocusGame: React.FC<AttentionFocusGameProps> = ({
 
   return (
     <div className="space-y-6 max-w-xl mx-auto animate-fadeIn">
+      {/* Audio-First Instruction */}
+      <AudioInstructionBanner
+        instructionKey={
+          mistakes > 0
+            ? 'instruction_try_again'
+            : foundIndices.length >= targetCount
+            ? 'instruction_well_done'
+            : 'instruction_find_cup'
+        }
+        lang={lang}
+        fallbackText="Find the 3 Blooming Lotuses (🌸) in the garden."
+        autoPlayOnMount={false}
+      />
+
       <div className="p-4 bg-teal-50 rounded-2xl border border-teal-200 text-center">
         <h3 className="text-xl font-bold font-serif-heading text-teal-950">
           Find the {targetCount} Blooming Lotuses (🌸)

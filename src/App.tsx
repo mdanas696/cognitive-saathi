@@ -72,8 +72,11 @@ import { Bot, Lock } from 'lucide-react';
 import { Analytics } from '@vercel/analytics/react';
 
 export default function App() {
-  // Authentication & Initial Role Selection Gate
-  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(false);
+  // Authentication & Initial Role Selection Gate (Persistent across reloads)
+  const [isLoggedIn, setIsLoggedIn] = useState<boolean>(() => {
+    const session = OfflineStore.getAuthSession();
+    return Boolean(session);
+  });
   const [isLogoutConfirmOpen, setIsLogoutConfirmOpen] = useState<boolean>(false);
 
   // Theme (Dark / Light Mode)
@@ -99,7 +102,10 @@ export default function App() {
   };
 
   // Roles & View Navigation
-  const [role, setRole] = useState<UserRole>('PATIENT');
+  const [role, setRole] = useState<UserRole>(() => {
+    const session = OfflineStore.getAuthSession();
+    return session?.role || 'PATIENT';
+  });
   const [patientTab, setPatientTab] = useState<'home' | 'activities' | 'my_day' | 'memories' | 'me' | 'settings'>('home');
   const [caregiverTab, setCaregiverTab] = useState<'dashboard' | 'activities' | 'memories' | 'routine' | 'reminders' | 'patient_detail' | 'reports'>('dashboard');
   const [activeGame, setActiveGame] = useState<GameDefinition | null>(null);
@@ -132,8 +138,22 @@ export default function App() {
 
   // Application Data & Local Offline Store
   const [allPatients, setAllPatients] = useState<PatientProfile[]>(() => OfflineStore.getPatients());
-  const [patient, setPatient] = useState<PatientProfile>(() => OfflineStore.getPatient());
-  const [activeCaretaker, setActiveCaretaker] = useState<CaretakerProfile | null>(null);
+  const [patient, setPatient] = useState<PatientProfile>(() => {
+    const session = OfflineStore.getAuthSession();
+    if (session?.patientId) {
+      const found = OfflineStore.getPatient(session.patientId);
+      if (found) return found;
+    }
+    return OfflineStore.getPatient() || DEFAULT_PATIENT;
+  });
+  const [activeCaretaker, setActiveCaretaker] = useState<CaretakerProfile | null>(() => {
+    const session = OfflineStore.getAuthSession();
+    if (session?.role === 'CAREGIVER' && session.caretakerId) {
+      const caretakers = OfflineStore.getCaretakers();
+      return caretakers.find((c) => c.id === session.caretakerId) || null;
+    }
+    return null;
+  });
   const [routine, setRoutine] = useState<RoutineTask[]>(DEFAULT_ROUTINE);
   const [reminders, setReminders] = useState<ReminderItem[]>(DEFAULT_REMINDERS);
   const [memories, setMemories] = useState<MemoryMoment[]>(() => OfflineStore.getMemories());
@@ -141,11 +161,35 @@ export default function App() {
 
   // Initialize data from local storage & register Service Worker
   useEffect(() => {
-    const loadedPatient = OfflineStore.getPatient();
-    const loadedRoutine = OfflineStore.getRoutine(loadedPatient.id);
-    const loadedReminders = OfflineStore.getReminders();
-    const loadedSessions = OfflineStore.getSessions();
-    const loadedMemories = OfflineStore.getMemories(loadedPatient.id);
+    const session = OfflineStore.getAuthSession();
+    let loadedPatient = OfflineStore.getPatient() || DEFAULT_PATIENT;
+
+    if (session) {
+      if (session.role === 'PATIENT' && session.patientId) {
+        const found = OfflineStore.getPatient(session.patientId);
+        if (found) loadedPatient = found;
+      } else if (session.role === 'CAREGIVER') {
+        if (session.caretakerId) {
+          const caretakers = OfflineStore.getCaretakers();
+          const foundC = caretakers.find((c) => c.id === session.caretakerId);
+          if (foundC) setActiveCaretaker(foundC);
+        }
+        if (session.patientId) {
+          const found = OfflineStore.getPatient(session.patientId);
+          if (found) loadedPatient = found;
+        }
+      }
+    }
+
+    if (!loadedPatient) {
+      loadedPatient = DEFAULT_PATIENT;
+    }
+
+    const patientId = loadedPatient.id || DEFAULT_PATIENT.id;
+    const loadedRoutine = OfflineStore.getRoutine(patientId);
+    const loadedReminders = OfflineStore.getReminders(patientId);
+    const loadedSessions = OfflineStore.getSessions(patientId);
+    const loadedMemories = OfflineStore.getMemories(patientId);
 
     setPatient(loadedPatient);
     setRoutine(loadedRoutine);
@@ -352,6 +396,7 @@ export default function App() {
   };
 
   const handleConfirmLogout = () => {
+    OfflineStore.clearAuthSession();
     setIsLoggedIn(false);
     setActiveGame(null);
     setIsLogoutConfirmOpen(false);
@@ -365,17 +410,22 @@ export default function App() {
           setPatient(loggedInPatient);
           setAllPatients(OfflineStore.getPatients());
           setRoutine(OfflineStore.getRoutine(loggedInPatient.id));
+          setReminders(OfflineStore.getReminders(loggedInPatient.id));
           setMemories(OfflineStore.getMemories(loggedInPatient.id));
+          setSessions(OfflineStore.getSessions(loggedInPatient.id));
           setRole('PATIENT');
           setPatientTab('home');
           setIsLoggedIn(true);
         }}
         onLoginCaregiver={(caretaker, selectedPatient) => {
+          const targetPatient = selectedPatient || OfflineStore.getPatient() || DEFAULT_PATIENT;
           setActiveCaretaker(caretaker);
-          setPatient(selectedPatient);
+          setPatient(targetPatient);
           setAllPatients(OfflineStore.getPatients());
-          setRoutine(OfflineStore.getRoutine(selectedPatient.id));
-          setMemories(OfflineStore.getMemories(selectedPatient.id));
+          setRoutine(OfflineStore.getRoutine(targetPatient.id));
+          setReminders(OfflineStore.getReminders(targetPatient.id));
+          setMemories(OfflineStore.getMemories(targetPatient.id));
+          setSessions(OfflineStore.getSessions(targetPatient.id));
           setRole('CAREGIVER');
           setCaregiverTab('dashboard');
           setIsLoggedIn(true);

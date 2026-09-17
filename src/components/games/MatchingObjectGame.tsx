@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Volume2, Sparkles, CheckCircle2, RefreshCw, ShieldCheck, Heart } from 'lucide-react';
 import { LanguageCode } from '../../types';
 import { VoiceService } from '../../lib/voiceService';
+import { AudioInstructionBanner } from '../common/AudioInstructionBanner';
 
 interface MatchingObjectGameProps {
   difficulty: number;
@@ -148,7 +149,7 @@ export const MatchingObjectGame: React.FC<MatchingObjectGameProps> = ({
       if (nextConsecutiveErrors >= 2) {
         setSupportMode(true);
         setChoicesCount(2);
-        VoiceService.speak(`Take your time, Amma. Let's look for the ${currentRound.targetName.split(' ')[0]} together.`, lang);
+        VoiceService.speak(`Take your time. Let's look for the ${currentRound.targetName.split(' ')[0]} together.`, lang);
       } else {
         VoiceService.speak('Take your time, let us try again gently.', lang);
       }
@@ -161,14 +162,30 @@ export const MatchingObjectGame: React.FC<MatchingObjectGameProps> = ({
 
   return (
     <div className="space-y-6 max-w-xl mx-auto animate-fadeIn">
-      {/* SIH Adaptive Engine Indicator: Transparent & Non-Diagnostic */}
+      {/* Audio-First Instruction Banner */}
+      <AudioInstructionBanner
+        instructionKey={
+          round === 0
+            ? 'instruction_find_cup'
+            : consecutiveErrors > 0
+            ? 'instruction_try_again'
+            : isSuccessFeedback
+            ? 'instruction_well_done'
+            : 'instruction_find_cup'
+        }
+        lang={lang}
+        fallbackText={currentRound.audioPrompt}
+        autoPlayOnMount={false}
+      />
+
+      {/* Adaptive Guidance Indicator */}
       <div className="flex items-center justify-between px-4 py-2.5 bg-stone-100 rounded-2xl border border-stone-200/90 text-xs">
         <div className="flex items-center gap-2 text-stone-700">
           <Sparkles className="w-4 h-4 text-teal-700" />
-          <span className="font-semibold">Adaptive Support Engine:</span>
+          <span className="font-semibold">Gentle Pace Engine:</span>
           <span className="text-stone-600">
-            {choicesCount === 2 ? 'Level 1 (2 Choices)' : 'Level 2 (3 Choices)'}
-            {supportMode && ' • Extra Support Active'}
+            {choicesCount === 2 ? 'Gentle (2 Choices)' : 'Standard (3 Choices)'}
+            {supportMode && ' • Extra Guidance Active'}
           </span>
         </div>
         <span className="text-stone-500 font-mono">

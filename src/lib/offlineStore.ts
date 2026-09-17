@@ -1,27 +1,33 @@
-import { GameSessionResult, RoutineTask, ReminderItem, PatientProfile, CaretakerProfile, SyncEvent, MemoryMoment, GameDefinition } from '../types';
+import { GameSessionResult, RoutineTask, ReminderItem, PatientProfile, CaretakerProfile, SyncEvent, MemoryMoment, GameDefinition, AuthSession } from '../types';
 
 export const DEFAULT_PATIENTS: PatientProfile[] = [
   {
-    id: 'patient-anima-72',
-    fullName: 'Anima Devi',
-    preferredName: 'Aita Anima',
+    id: 'patient-senior-1',
+    fullName: 'Ramesh Sharma',
+    preferredName: 'Ramesh',
+    username: 'ramesh',
+    password: 'password123',
+    pin: '5678',
+    linkedCaregiverKey: 'CG-CARE88',
     age: 72,
-    region: 'Kamrup, Assam',
+    region: 'Guwahati, Assam',
     state: 'Assam',
     preferredLanguage: 'en',
-    caregiverName: 'Animesh Bora (Son)',
+    caregiverName: 'Priya Sharma (Daughter)',
     caregiverPhone: '+91 94350 12345',
     avatarUrl: '',
-    dailyStreak: 5,
-    todayCompletedCount: 2,
-    pin: '1234',
+    dailyStreak: 0,
+    todayCompletedCount: 0,
     phone: '9435011111',
     hasCaregiver: true,
   },
   {
-    id: 'patient-biren-76',
+    id: 'patient-independent-2',
     fullName: 'Biren Kalita',
-    preferredName: 'Koka Biren',
+    preferredName: 'Biren',
+    username: 'biren',
+    password: 'password123',
+    pin: '4321',
     age: 76,
     region: 'Guwahati, Assam',
     state: 'Assam',
@@ -29,28 +35,10 @@ export const DEFAULT_PATIENTS: PatientProfile[] = [
     caregiverName: 'Self',
     caregiverPhone: '+91 94350 22222',
     avatarUrl: '',
-    dailyStreak: 3,
-    todayCompletedCount: 1,
-    pin: '1234',
+    dailyStreak: 0,
+    todayCompletedCount: 0,
     phone: '9435022222',
     hasCaregiver: false,
-  },
-  {
-    id: 'patient-maya-69',
-    fullName: 'Maya Phukan',
-    preferredName: 'Aita Maya',
-    age: 69,
-    region: 'Dibrugarh, Assam',
-    state: 'Assam',
-    preferredLanguage: 'en',
-    caregiverName: 'Dr. Priyam Saikia (Caregiver)',
-    caregiverPhone: '+91 98765 43210',
-    avatarUrl: '',
-    dailyStreak: 7,
-    todayCompletedCount: 3,
-    pin: '1234',
-    phone: '9435033333',
-    hasCaregiver: true,
   },
 ];
 
@@ -58,24 +46,17 @@ export const DEFAULT_PATIENT: PatientProfile = DEFAULT_PATIENTS[0];
 
 export const DEFAULT_CARETAKERS: CaretakerProfile[] = [
   {
-    id: 'caretaker-animesh',
-    fullName: 'Animesh Bora',
+    id: 'caretaker-priya',
+    fullName: 'Priya Sharma',
+    username: 'priya',
+    password: 'password123',
     phone: '+91 94350 12345',
-    email: 'animesh.bora@care.in',
-    relation: 'Son & Primary Caregiver',
-    pin: '1234',
+    email: 'priya.care@cognitivesaathi.org',
+    relation: 'Daughter & Primary Caregiver',
+    pin: '5678',
+    caregiverKey: 'CG-CARE88',
     avatarUrl: '',
-    assignedPatientIds: ['patient-anima-72'],
-  },
-  {
-    id: 'caretaker-priyam',
-    fullName: 'Dr. Priyam Saikia',
-    phone: '+91 98765 43210',
-    email: 'priyam.saikia@eldercare.org',
-    relation: 'Elder Care Specialist',
-    pin: '1234',
-    avatarUrl: '',
-    assignedPatientIds: ['patient-maya-69', 'patient-anima-72'],
+    assignedPatientIds: ['patient-senior-1'],
   },
 ];
 
@@ -139,7 +120,7 @@ export const DEFAULT_ROUTINE: RoutineTask[] = [
     timeSlot: 'Morning',
     time: '07:30 AM',
     icon: 'Coffee',
-    completed: true,
+    completed: false,
     notes: 'Taken with warm pitha and water',
   },
   {
@@ -148,7 +129,7 @@ export const DEFAULT_ROUTINE: RoutineTask[] = [
     timeSlot: 'Morning',
     time: '08:15 AM',
     icon: 'Pill',
-    completed: true,
+    completed: false,
     notes: 'Prescribed morning medicine',
   },
   {
@@ -201,7 +182,7 @@ export const DEFAULT_ROUTINE: RoutineTask[] = [
 export const DEFAULT_REMINDERS: ReminderItem[] = [
   {
     id: 'rem-1',
-    patientId: 'patient-anima-72',
+    patientId: 'patient-senior-1',
     type: 'MEDICINE',
     title: 'Morning BP & Heart Tablet',
     description: 'Take 1 tablet with a full glass of water after tea.',
@@ -213,7 +194,7 @@ export const DEFAULT_REMINDERS: ReminderItem[] = [
   },
   {
     id: 'rem-2',
-    patientId: 'patient-anima-72',
+    patientId: 'patient-senior-1',
     type: 'HYDRATION',
     title: 'Midday Hydration (Warm Water)',
     description: 'Drink 1 soothing glass of water or lemonade.',
@@ -225,7 +206,7 @@ export const DEFAULT_REMINDERS: ReminderItem[] = [
   },
   {
     id: 'rem-3',
-    patientId: 'patient-anima-72',
+    patientId: 'patient-senior-1',
     type: 'ACTIVITY',
     title: 'Memory Keepsake Activity',
     description: 'Spend 3 comfortable minutes exercising memory with Saathi.',
@@ -237,7 +218,7 @@ export const DEFAULT_REMINDERS: ReminderItem[] = [
   },
   {
     id: 'rem-4',
-    patientId: 'patient-anima-72',
+    patientId: 'patient-senior-1',
     type: 'APPOINTMENT',
     title: 'Dr. Barua Routine Clinic Checkup',
     description: 'Upcoming routine blood pressure & wellness follow-up on Thursday.',
@@ -304,7 +285,7 @@ export const DEFAULT_RECENT_SESSIONS: GameSessionResult[] = [
   {
     id: 'sess-1',
     gameId: 'memory-recall',
-    patientId: 'patient-anima-72',
+    patientId: 'patient-senior-1',
     difficulty: 2,
     accuracy: 0.90,
     reactionTimeMs: 3800,
@@ -312,13 +293,13 @@ export const DEFAULT_RECENT_SESSIONS: GameSessionResult[] = [
     attempts: 4,
     mistakes: 0,
     hintsUsed: 1,
-    completedAt: 'Today, 09:30 AM',
+    completedAt: 'Yesterday, 04:30 PM',
     syncStatus: 'synced',
   },
   {
     id: 'sess-2',
     gameId: 'daily-routine',
-    patientId: 'patient-anima-72',
+    patientId: 'patient-senior-1',
     difficulty: 1,
     accuracy: 1.0,
     reactionTimeMs: 2900,
@@ -326,13 +307,13 @@ export const DEFAULT_RECENT_SESSIONS: GameSessionResult[] = [
     attempts: 3,
     mistakes: 0,
     hintsUsed: 0,
-    completedAt: 'Yesterday, 04:15 PM',
+    completedAt: '2 days ago, 04:15 PM',
     syncStatus: 'synced',
   },
   {
     id: 'sess-3',
     gameId: 'pattern-sequence',
-    patientId: 'patient-anima-72',
+    patientId: 'patient-senior-1',
     difficulty: 2,
     accuracy: 0.85,
     reactionTimeMs: 4200,
@@ -340,13 +321,13 @@ export const DEFAULT_RECENT_SESSIONS: GameSessionResult[] = [
     attempts: 4,
     mistakes: 1,
     hintsUsed: 1,
-    completedAt: '2 days ago, 10:00 AM',
+    completedAt: '3 days ago, 10:00 AM',
     syncStatus: 'synced',
   },
   {
     id: 'sess-4',
     gameId: 'attention-focus',
-    patientId: 'patient-anima-72',
+    patientId: 'patient-senior-1',
     difficulty: 1,
     accuracy: 0.95,
     reactionTimeMs: 3100,
@@ -354,23 +335,60 @@ export const DEFAULT_RECENT_SESSIONS: GameSessionResult[] = [
     attempts: 4,
     mistakes: 0,
     hintsUsed: 0,
-    completedAt: '3 days ago, 11:20 AM',
+    completedAt: '4 days ago, 11:20 AM',
     syncStatus: 'synced',
   },
 ];
 
 const STORAGE_KEYS = {
-  PATIENT: 'cognitivesaathi_patient',
-  PATIENTS_LIST: 'cognitivesaathi_patients_list',
-  CARETAKERS_LIST: 'cognitivesaathi_caretakers_list',
-  ACTIVE_PATIENT_ID: 'cognitivesaathi_active_patient_id',
-  ACTIVE_CARETAKER_ID: 'cognitivesaathi_active_caretaker_id',
-  ROUTINE: 'cognitivesaathi_routine',
-  REMINDERS: 'cognitivesaathi_reminders',
-  MEMORIES: 'cognitivesaathi_memories',
-  SESSIONS: 'cognitivesaathi_sessions',
-  SYNC_QUEUE: 'cognitivesaathi_sync_queue',
+  HAS_INITIALIZED: 'cognitivesaathi_v3_has_initialized',
+  DEMO_MODE_ACTIVE: 'cognitivesaathi_v3_demo_mode',
+  SESSION: 'cognitivesaathi_v3_auth_session',
+  PATIENT: 'cognitivesaathi_v3_patient',
+  PATIENTS_LIST: 'cognitivesaathi_v3_patients_list',
+  CARETAKERS_LIST: 'cognitivesaathi_v3_caretakers_list',
+  ACTIVE_PATIENT_ID: 'cognitivesaathi_v3_active_patient_id',
+  ACTIVE_CARETAKER_ID: 'cognitivesaathi_v3_active_caretaker_id',
+  ROUTINE: 'cognitivesaathi_v3_routine',
+  REMINDERS: 'cognitivesaathi_v3_reminders',
+  MEMORIES: 'cognitivesaathi_v3_memories',
+  SESSIONS: 'cognitivesaathi_v3_sessions',
+  SYNC_QUEUE: 'cognitivesaathi_v3_sync_queue',
 };
+
+// Aggressive one-time purge of ANY legacy persona data or unversioned keys in localStorage
+export function purgeLegacyPersonaData(): void {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    const keysToRemove: string[] = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key) continue;
+      // If it is an old unversioned cognitivesaathi key
+      if (key.startsWith('cognitivesaathi_') && !key.startsWith('cognitivesaathi_v3_')) {
+        keysToRemove.push(key);
+      } else {
+        // Also check if any stored item contains "anima" or "aita"
+        const val = localStorage.getItem(key) || '';
+        if (val.toLowerCase().includes('anima') || val.toLowerCase().includes('aita')) {
+          keysToRemove.push(key);
+        }
+      }
+    }
+    keysToRemove.forEach((k) => {
+      try {
+        localStorage.removeItem(k);
+      } catch {}
+    });
+  } catch (e) {
+    console.warn('Storage purge warning:', e);
+  }
+}
+
+// Run immediately when module is evaluated
+if (typeof window !== 'undefined') {
+  purgeLegacyPersonaData();
+}
 
 // Helper to strip any legacy stock photos from stored data
 const stripStockAvatar = (url?: string): string => {
@@ -379,30 +397,145 @@ const stripStockAvatar = (url?: string): string => {
   return url;
 };
 
-const sanitizePatient = (p: PatientProfile): PatientProfile => ({
-  ...p,
-  avatarUrl: stripStockAvatar(p.avatarUrl),
-});
+const sanitizePatient = (p: PatientProfile): PatientProfile => {
+  const isLegacy =
+    p.fullName.toLowerCase().includes('anima') ||
+    p.fullName.toLowerCase().includes('aita') ||
+    (p.username && p.username.toLowerCase().includes('anima'));
+
+  const cleanProfile: PatientProfile = isLegacy
+    ? {
+        ...DEFAULT_PATIENTS[0],
+        id: p.id || DEFAULT_PATIENTS[0].id,
+      }
+    : p;
+
+  return {
+    ...cleanProfile,
+    avatarUrl: stripStockAvatar(cleanProfile.avatarUrl),
+  };
+};
 
 const sanitizeCaretaker = (c: CaretakerProfile): CaretakerProfile => ({
   ...c,
   avatarUrl: stripStockAvatar(c.avatarUrl),
+  caregiverKey: c.caregiverKey || OfflineStore.generateCaregiverKey(),
 });
 
 // Safe Local Storage & IndexedDB abstraction
 export class OfflineStore {
+  static isDemoModeActive(): boolean {
+    try {
+      return localStorage.getItem(STORAGE_KEYS.DEMO_MODE_ACTIVE) === 'true';
+    } catch {
+      return false;
+    }
+  }
+
+  static generateCaregiverKey(): string {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+    let code = '';
+    for (let i = 0; i < 6; i++) {
+      code += chars.charAt(Math.floor(Math.random() * chars.length));
+    }
+    return `CG-${code}`;
+  }
+
+  /**
+   * Explicit Demo Mode Loader for Judges and Evaluators
+   * Populates sample profiles and default routines
+   */
+  static loadDemoMode(): { patient: PatientProfile; caretaker: CaretakerProfile } {
+    try {
+      localStorage.setItem(STORAGE_KEYS.DEMO_MODE_ACTIVE, 'true');
+      this.savePatients(DEFAULT_PATIENTS);
+      this.saveCaretakers(DEFAULT_CARETAKERS);
+      this.setActivePatientId(DEFAULT_PATIENTS[0].id);
+      this.setActiveCaretakerId(DEFAULT_CARETAKERS[0].id);
+
+      // Seed scoped data for demo patients
+      localStorage.setItem(`${STORAGE_KEYS.ROUTINE}_${DEFAULT_PATIENTS[0].id}`, JSON.stringify(DEFAULT_ROUTINE));
+      localStorage.setItem(
+        `${STORAGE_KEYS.REMINDERS}_${DEFAULT_PATIENTS[0].id}`,
+        JSON.stringify(DEFAULT_REMINDERS.map((r) => ({ ...r, patientId: DEFAULT_PATIENTS[0].id })))
+      );
+      localStorage.setItem(`${STORAGE_KEYS.MEMORIES}_${DEFAULT_PATIENTS[0].id}`, JSON.stringify(DEFAULT_MEMORIES));
+      localStorage.setItem(`${STORAGE_KEYS.SESSIONS}_${DEFAULT_PATIENTS[0].id}`, JSON.stringify(DEFAULT_RECENT_SESSIONS));
+
+      return {
+        patient: DEFAULT_PATIENTS[0],
+        caretaker: DEFAULT_CARETAKERS[0],
+      };
+    } catch (e) {
+      console.warn('Failed to load demo mode:', e);
+      return {
+        patient: DEFAULT_PATIENTS[0],
+        caretaker: DEFAULT_CARETAKERS[0],
+      };
+    }
+  }
+
+  // Session Persistence (keeps user logged in across refresh / tab reopen)
+  static getAuthSession(): AuthSession | null {
+    try {
+      const data = localStorage.getItem(STORAGE_KEYS.SESSION);
+      if (!data) return null;
+      const session: AuthSession = JSON.parse(data);
+      if (session.expiresAt && Date.now() > session.expiresAt) {
+        this.clearAuthSession();
+        return null;
+      }
+      // Auto-clear any legacy persona session
+      if (
+        (session.userName && (session.userName.toLowerCase().includes('anima') || session.userName.toLowerCase().includes('aita'))) ||
+        (session.patientId && (session.patientId.toLowerCase().includes('anima') || session.patientId.toLowerCase().includes('aita')))
+      ) {
+        this.clearAuthSession();
+        return null;
+      }
+      return session;
+    } catch {
+      return null;
+    }
+  }
+
+  static saveAuthSession(session: AuthSession): void {
+    try {
+      localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(session));
+    } catch (e) {
+      console.warn('Session save error:', e);
+    }
+  }
+
+  static clearAuthSession(): void {
+    try {
+      localStorage.removeItem(STORAGE_KEYS.SESSION);
+    } catch (e) {
+      console.warn('Session clear error:', e);
+    }
+  }
+
   static getPatients(): PatientProfile[] {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.PATIENTS_LIST);
-      const list: PatientProfile[] = data ? JSON.parse(data) : DEFAULT_PATIENTS;
-      const sanitized = list.map(sanitizePatient);
-      // If any had legacy stock photos, update storage cleanly
-      if (data && JSON.stringify(list) !== JSON.stringify(sanitized)) {
-        this.savePatients(sanitized);
+      if (data) {
+        const list: PatientProfile[] = JSON.parse(data);
+        const filtered = list
+          .filter(
+            (p) =>
+              !p.fullName.toLowerCase().includes('anima') &&
+              !p.fullName.toLowerCase().includes('aita') &&
+              (!p.username || !p.username.toLowerCase().includes('anima'))
+          )
+          .map(sanitizePatient);
+        if (filtered.length > 0) {
+          return filtered;
+        }
       }
-      return sanitized;
+      // Return clean default patients so app has ready-to-use profiles
+      return DEFAULT_PATIENTS.map(sanitizePatient);
     } catch {
-      return DEFAULT_PATIENTS;
+      return DEFAULT_PATIENTS.map(sanitizePatient);
     }
   }
 
@@ -416,14 +549,17 @@ export class OfflineStore {
 
   static addPatient(patient: PatientProfile): void {
     const list = this.getPatients();
-    const existingIndex = list.findIndex(p => p.id === patient.id || (p.phone && p.phone === patient.phone));
+    const existingIndex = list.findIndex((p) => p.id === patient.id || (p.phone && p.phone === patient.phone));
+    const toSave = {
+      ...patient,
+    };
     if (existingIndex >= 0) {
-      list[existingIndex] = { ...list[existingIndex], ...patient };
+      list[existingIndex] = { ...list[existingIndex], ...toSave };
     } else {
-      list.push(patient);
+      list.push(toSave);
     }
     this.savePatients(list);
-    this.setActivePatientId(patient.id);
+    this.setActivePatientId(toSave.id);
   }
 
   static deletePatient(id: string): PatientProfile[] {
@@ -456,17 +592,17 @@ export class OfflineStore {
   static getPatient(id?: string): PatientProfile {
     try {
       const list = this.getPatients();
+      if (list.length === 0) return DEFAULT_PATIENT;
+
       if (id) {
-        const found = list.find(p => p.id === id);
+        const found = list.find((p) => p.id === id);
         if (found) return sanitizePatient(found);
       }
       const activeId = this.getActivePatientId();
-      const foundActive = list.find(p => p.id === activeId);
+      const foundActive = list.find((p) => p.id === activeId);
       if (foundActive) return sanitizePatient(foundActive);
 
-      const data = localStorage.getItem(STORAGE_KEYS.PATIENT);
-      const pat = data ? JSON.parse(data) : list[0] || DEFAULT_PATIENT;
-      return sanitizePatient(pat);
+      return sanitizePatient(list[0]);
     } catch {
       return DEFAULT_PATIENT;
     }
@@ -484,9 +620,12 @@ export class OfflineStore {
 
   static getActivePatientId(): string {
     try {
-      return localStorage.getItem(STORAGE_KEYS.ACTIVE_PATIENT_ID) || DEFAULT_PATIENTS[0].id;
+      const saved = localStorage.getItem(STORAGE_KEYS.ACTIVE_PATIENT_ID);
+      if (saved) return saved;
+      const list = this.getPatients();
+      return list.length > 0 ? list[0].id : '';
     } catch {
-      return DEFAULT_PATIENTS[0].id;
+      return '';
     }
   }
 
@@ -501,14 +640,15 @@ export class OfflineStore {
   static getCaretakers(): CaretakerProfile[] {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.CARETAKERS_LIST);
-      const list: CaretakerProfile[] = data ? JSON.parse(data) : DEFAULT_CARETAKERS;
-      const sanitized = list.map(sanitizeCaretaker);
-      if (data && JSON.stringify(list) !== JSON.stringify(sanitized)) {
-        this.saveCaretakers(sanitized);
+      if (data) {
+        const list: CaretakerProfile[] = JSON.parse(data);
+        if (list.length > 0) {
+          return list.map(sanitizeCaretaker);
+        }
       }
-      return sanitized;
+      return DEFAULT_CARETAKERS.map(sanitizeCaretaker);
     } catch {
-      return DEFAULT_CARETAKERS;
+      return DEFAULT_CARETAKERS.map(sanitizeCaretaker);
     }
   }
 
@@ -522,7 +662,7 @@ export class OfflineStore {
 
   static addCaretaker(caretaker: CaretakerProfile): void {
     const list = this.getCaretakers();
-    const existingIndex = list.findIndex(c => c.id === caretaker.id || c.phone === caretaker.phone);
+    const existingIndex = list.findIndex((c) => c.id === caretaker.id || (c.phone && c.phone === caretaker.phone));
     if (existingIndex >= 0) {
       list[existingIndex] = { ...list[existingIndex], ...caretaker };
     } else {
@@ -534,9 +674,12 @@ export class OfflineStore {
 
   static getActiveCaretakerId(): string {
     try {
-      return localStorage.getItem(STORAGE_KEYS.ACTIVE_CARETAKER_ID) || DEFAULT_CARETAKERS[0].id;
+      const saved = localStorage.getItem(STORAGE_KEYS.ACTIVE_CARETAKER_ID);
+      if (saved) return saved;
+      const list = this.getCaretakers();
+      return list.length > 0 ? list[0].id : '';
     } catch {
-      return DEFAULT_CARETAKERS[0].id;
+      return '';
     }
   }
 
@@ -548,24 +691,117 @@ export class OfflineStore {
     }
   }
 
+  // Patient links themselves using Caregiver's unique Key
+  static linkPatientToCaregiverByKey(
+    patientId: string,
+    caregiverKey: string
+  ): { success: boolean; error?: string; caretaker?: CaretakerProfile; patient?: PatientProfile } {
+    const cleanKey = caregiverKey.trim().toUpperCase();
+    if (!cleanKey) {
+      return { success: false, error: 'Please enter a valid Caregiver Key (e.g., CG-CARE88).' };
+    }
+
+    const allCaretakers = this.getCaretakers();
+    const targetCaretaker = allCaretakers.find(
+      (c) => (c.caregiverKey || '').toUpperCase() === cleanKey
+    );
+
+    if (!targetCaretaker) {
+      return {
+        success: false,
+        error: `No caregiver account found with key "${cleanKey}". Please ask your caregiver for the key shown on their Caregiver Dashboard.`,
+      };
+    }
+
+    const allPatients = this.getPatients();
+    const targetPatient = allPatients.find((p) => p.id === patientId);
+    if (!targetPatient) {
+      return { success: false, error: 'Patient account not found.' };
+    }
+
+    // Link patient to caretaker's assigned list
+    if (!targetCaretaker.assignedPatientIds.includes(targetPatient.id)) {
+      targetCaretaker.assignedPatientIds.push(targetPatient.id);
+      this.saveCaretakers(allCaretakers);
+    }
+
+    // Update patient's caregiver details
+    targetPatient.hasCaregiver = true;
+    targetPatient.caregiverName = `${targetCaretaker.fullName} (${targetCaretaker.relation || 'Caregiver'})`;
+    targetPatient.caregiverPhone = targetCaretaker.phone;
+    targetPatient.linkedCaregiverKey = targetCaretaker.caregiverKey;
+    this.savePatient(targetPatient);
+
+    return { success: true, caretaker: targetCaretaker, patient: targetPatient };
+  }
+
+  // Alias for backward compatibility if called
+  static linkCaregiverToPatientByKey(
+    caretakerId: string,
+    key: string
+  ): { success: boolean; error?: string; patient?: PatientProfile } {
+    const allCaretakers = this.getCaretakers();
+    const caretaker = allCaretakers.find((c) => c.id === caretakerId);
+    if (!caretaker) return { success: false, error: 'Caregiver not found.' };
+
+    const allPatients = this.getPatients();
+    const patient = allPatients.find((p) => p.id === key || (p.linkedCaregiverKey || '').toUpperCase() === key.trim().toUpperCase());
+    if (patient) {
+      return this.linkPatientToCaregiverByKey(patient.id, caretaker.caregiverKey);
+    }
+    return { success: false, error: 'Invalid key.' };
+  }
+
+  static unlinkCaregiver(patientId: string): void {
+    const patient = this.getPatient(patientId);
+    if (!patient) return;
+
+    const allCaretakers = this.getCaretakers();
+    allCaretakers.forEach((c) => {
+      c.assignedPatientIds = c.assignedPatientIds.filter((id) => id !== patientId);
+    });
+    this.saveCaretakers(allCaretakers);
+
+    patient.hasCaregiver = false;
+    patient.caregiverName = 'Self';
+    patient.caregiverPhone = '';
+    patient.linkedCaregiverKey = undefined;
+    this.savePatient(patient);
+  }
+
+  static resetPatientPassword(
+    patientId: string,
+    newPassOrPin: string
+  ): { success: boolean; error?: string } {
+    const patient = this.getPatient(patientId);
+    if (!patient) return { success: false, error: 'Patient not found' };
+
+    patient.password = newPassOrPin.trim();
+    patient.pin = newPassOrPin.trim();
+    this.savePatient(patient);
+    return { success: true };
+  }
+
+  // Scoped Routines (Strictly isolated per patient, no global key reads/writes)
   static getRoutine(patientId?: string): RoutineTask[] {
     try {
       const pId = patientId || this.getActivePatientId();
+      if (!pId) return [];
       const key = `${STORAGE_KEYS.ROUTINE}_${pId}`;
-      const data = localStorage.getItem(key) || localStorage.getItem(STORAGE_KEYS.ROUTINE);
-      return data ? JSON.parse(data) : DEFAULT_ROUTINE;
+      const data = localStorage.getItem(key);
+      return data ? JSON.parse(data) : [];
     } catch {
-      return DEFAULT_ROUTINE;
+      return [];
     }
   }
 
   static saveRoutine(routine: RoutineTask[], patientId?: string): void {
     try {
       const pId = patientId || this.getActivePatientId();
+      if (!pId) return;
       const key = `${STORAGE_KEYS.ROUTINE}_${pId}`;
       localStorage.setItem(key, JSON.stringify(routine));
-      localStorage.setItem(STORAGE_KEYS.ROUTINE, JSON.stringify(routine));
-      this.enqueueSyncEvent('ROUTINE_UPDATED', { count: routine.filter(r => r.completed).length, patientId: pId });
+      this.enqueueSyncEvent('ROUTINE_UPDATED', { count: routine.filter((r) => r.completed).length, patientId: pId });
     } catch (e) {
       console.warn('Local storage error:', e);
     }
@@ -587,7 +823,7 @@ export class OfflineStore {
 
   static deleteTaskFromRoutine(taskId: string, patientId?: string): RoutineTask[] {
     const list = this.getRoutine(patientId);
-    const updated = list.filter(t => t.id !== taskId);
+    const updated = list.filter((t) => t.id !== taskId);
     this.saveRoutine(updated, patientId);
     return updated;
   }
@@ -595,6 +831,7 @@ export class OfflineStore {
   static getAiReport(patientId?: string): any | null {
     try {
       const pId = patientId || this.getActivePatientId();
+      if (!pId) return null;
       const data = localStorage.getItem(`cognitivesaathi_ai_report_${pId}`);
       return data ? JSON.parse(data) : null;
     } catch {
@@ -605,47 +842,57 @@ export class OfflineStore {
   static saveAiReport(report: any, patientId?: string): void {
     try {
       const pId = patientId || this.getActivePatientId();
+      if (!pId) return;
       localStorage.setItem(`cognitivesaathi_ai_report_${pId}`, JSON.stringify(report));
     } catch (e) {
       console.warn('Local storage error:', e);
     }
   }
 
-  static getReminders(): ReminderItem[] {
+  // Scoped Reminders (Strictly isolated per patient, no global key reads/writes)
+  static getReminders(patientId?: string): ReminderItem[] {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.REMINDERS);
-      return data ? JSON.parse(data) : DEFAULT_REMINDERS;
+      const pId = patientId || this.getActivePatientId();
+      if (!pId) return [];
+      const key = `${STORAGE_KEYS.REMINDERS}_${pId}`;
+      const data = localStorage.getItem(key);
+      return data ? JSON.parse(data) : [];
     } catch {
-      return DEFAULT_REMINDERS;
+      return [];
     }
   }
 
-  static saveReminders(reminders: ReminderItem[]): void {
+  static saveReminders(reminders: ReminderItem[], patientId?: string): void {
     try {
-      localStorage.setItem(STORAGE_KEYS.REMINDERS, JSON.stringify(reminders));
-      this.enqueueSyncEvent('REMINDER_TOGGLED', { total: reminders.length });
+      const pId = patientId || this.getActivePatientId();
+      if (!pId) return;
+      const key = `${STORAGE_KEYS.REMINDERS}_${pId}`;
+      localStorage.setItem(key, JSON.stringify(reminders));
+      this.enqueueSyncEvent('REMINDER_TOGGLED', { total: reminders.length, patientId: pId });
     } catch (e) {
       console.warn('Local storage error:', e);
     }
   }
 
+  // Scoped Memories (Strictly isolated per patient, no global key reads/writes)
   static getMemories(patientId?: string): MemoryMoment[] {
     try {
       const pId = patientId || this.getActivePatientId();
+      if (!pId) return [];
       const key = `${STORAGE_KEYS.MEMORIES}_${pId}`;
-      const data = localStorage.getItem(key) || localStorage.getItem(STORAGE_KEYS.MEMORIES);
-      return data ? JSON.parse(data) : DEFAULT_MEMORIES;
+      const data = localStorage.getItem(key);
+      return data ? JSON.parse(data) : [];
     } catch {
-      return DEFAULT_MEMORIES;
+      return [];
     }
   }
 
   static saveMemories(memories: MemoryMoment[], patientId?: string): void {
     try {
       const pId = patientId || this.getActivePatientId();
+      if (!pId) return;
       const key = `${STORAGE_KEYS.MEMORIES}_${pId}`;
       localStorage.setItem(key, JSON.stringify(memories));
-      localStorage.setItem(STORAGE_KEYS.MEMORIES, JSON.stringify(memories));
     } catch (e) {
       console.warn('Local storage error:', e);
     }
@@ -660,37 +907,45 @@ export class OfflineStore {
 
   static deleteMemory(id: string, patientId?: string): MemoryMoment[] {
     const list = this.getMemories(patientId);
-    const updated = list.filter(m => m.id !== id);
+    const updated = list.filter((m) => m.id !== id);
     this.saveMemories(updated, patientId);
     return updated;
   }
 
-  static getSessions(): GameSessionResult[] {
+  // Scoped Sessions (Strictly isolated per patient)
+  static getSessions(patientId?: string): GameSessionResult[] {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.SESSIONS);
-      return data ? JSON.parse(data) : DEFAULT_RECENT_SESSIONS;
+      const pId = patientId || this.getActivePatientId();
+      if (!pId) return [];
+      const key = `${STORAGE_KEYS.SESSIONS}_${pId}`;
+      const data = localStorage.getItem(key);
+      return data ? JSON.parse(data) : [];
     } catch {
-      return DEFAULT_RECENT_SESSIONS;
+      return [];
     }
   }
 
   static addSession(session: GameSessionResult): void {
     try {
-      const sessions = this.getSessions();
+      const pId = session.patientId || this.getActivePatientId();
+      const sessions = this.getSessions(pId);
       const updated = [session, ...sessions];
-      localStorage.setItem(STORAGE_KEYS.SESSIONS, JSON.stringify(updated));
+      localStorage.setItem(`${STORAGE_KEYS.SESSIONS}_${pId}`, JSON.stringify(updated));
 
       // Also enqueue in offline sync queue
       this.enqueueSyncEvent('GAME_COMPLETED', {
         gameId: session.gameId,
         accuracy: session.accuracy,
         durationMs: session.completionTimeMs,
+        patientId: pId,
       });
 
       // Update patient streak & count
-      const patient = this.getPatient();
-      patient.todayCompletedCount += 1;
-      this.savePatient(patient);
+      const patient = this.getPatient(pId);
+      if (patient) {
+        patient.todayCompletedCount = (patient.todayCompletedCount || 0) + 1;
+        this.savePatient(patient);
+      }
     } catch (e) {
       console.warn('Local storage error:', e);
     }
@@ -711,7 +966,7 @@ export class OfflineStore {
       const newEvent: SyncEvent = {
         clientEventId: `evt-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
         eventType: type,
-        patientId: 'patient-anima-72',
+        patientId: (payload.patientId as string) || this.getActivePatientId(),
         timestamp: new Date().toISOString(),
         payload,
         status: 'pending',
@@ -726,19 +981,22 @@ export class OfflineStore {
   static clearSyncQueue(): void {
     try {
       localStorage.setItem(STORAGE_KEYS.SYNC_QUEUE, JSON.stringify([]));
-      // Mark pending sessions as synced
-      const sessions = this.getSessions().map(s => ({ ...s, syncStatus: 'synced' as const }));
-      localStorage.setItem(STORAGE_KEYS.SESSIONS, JSON.stringify(sessions));
     } catch (e) {
       console.warn('Sync queue clear error:', e);
     }
   }
 
-  static getCaregiverPin(): string {
+  static getCaregiverPin(caretakerId?: string): string {
     try {
-      return localStorage.getItem('cognitivesaathi_caregiver_pin') || '1234';
+      if (caretakerId) {
+        const c = this.getCaretakers().find((item) => item.id === caretakerId);
+        if (c?.pin) return c.pin;
+      }
+      const activeC = this.getCaretakers().find((item) => item.id === this.getActiveCaretakerId());
+      if (activeC?.pin) return activeC.pin;
+      return localStorage.getItem('cognitivesaathi_caregiver_pin') || '';
     } catch {
-      return '1234';
+      return '';
     }
   }
 

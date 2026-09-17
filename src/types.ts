@@ -100,10 +100,15 @@ export interface PatientProfile {
   id: string;
   fullName: string;
   preferredName: string;
+  username?: string;
+  password?: string;
+  pin?: string;
+  linkedCaregiverKey?: string;
   age: number;
-  region: string; // e.g. "Guwahati, Assam"
+  region: string;
   state: 'Assam' | 'Manipur' | 'Meghalaya' | 'Nagaland' | 'Tripura' | 'Arunachal Pradesh' | 'Mizoram' | 'Sikkim';
   preferredLanguage: LanguageCode;
+  fallbackLanguage?: LanguageCode;
   caregiverName: string;
   caregiverPhone: string;
   hasCaregiver?: boolean;
@@ -112,19 +117,43 @@ export interface PatientProfile {
   avatarUrl?: string;
   dailyStreak: number;
   todayCompletedCount: number;
-  pin?: string;
   phone?: string;
 }
 
 export interface CaretakerProfile {
   id: string;
   fullName: string;
+  username?: string;
+  password?: string;
   phone: string;
   email?: string;
   pin: string;
+  caregiverKey: string;
   relation: string;
   avatarUrl?: string;
   assignedPatientIds: string[];
+}
+
+export type LanguagePackValidationStatus = 'draft' | 'reviewed' | 'approved';
+export type LanguagePackDownloadStatus = 'downloaded' | 'not_downloaded' | 'downloading';
+
+export interface LanguagePack {
+  language_code: LanguageCode;
+  language_name: string;
+  translations: Record<string, string>;
+  audio_assets: Record<string, string>; // e.g. key: instruction_key, value: audio data or synthesizer key
+  version: string;
+  validation_status: LanguagePackValidationStatus;
+  download_status: LanguagePackDownloadStatus;
+  isPilot?: boolean;
+}
+
+export interface AuthSession {
+  role: UserRole;
+  patientId?: string;
+  caretakerId?: string;
+  expiresAt: number;
+  userName?: string;
 }
 
 export interface SyncEvent {

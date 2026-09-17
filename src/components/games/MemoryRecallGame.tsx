@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Sparkles, Check, RefreshCw, Eye } from 'lucide-react';
 import { LanguageCode } from '../../types';
+import { AudioInstructionBanner } from '../common/AudioInstructionBanner';
 
 interface MemoryRecallGameProps {
   difficulty: number;
@@ -27,6 +28,7 @@ const MEMORY_ITEMS: ItemCard[] = [
 
 export const MemoryRecallGame: React.FC<MemoryRecallGameProps> = ({
   difficulty,
+  lang,
   onComplete,
 }) => {
   const [phase, setPhase] = useState<'MEMORIZE' | 'RECALL'>('MEMORIZE');
@@ -82,6 +84,24 @@ export const MemoryRecallGame: React.FC<MemoryRecallGameProps> = ({
 
   return (
     <div className="space-y-6 max-w-2xl mx-auto">
+      {/* Audio-First Instruction */}
+      <AudioInstructionBanner
+        instructionKey={
+          phase === 'MEMORIZE'
+            ? 'instruction_continue'
+            : mistakes > 0
+            ? 'instruction_try_again'
+            : 'instruction_find_cup'
+        }
+        lang={lang}
+        fallbackText={
+          phase === 'MEMORIZE'
+            ? `Take a gentle look at these ${itemCount} keepsakes. Tap ready when done.`
+            : `Which ${itemCount} items did you see just now?`
+        }
+        autoPlayOnMount={false}
+      />
+
       {phase === 'MEMORIZE' ? (
         <div className="space-y-6 text-center animate-fadeIn">
           <div className="p-4 bg-teal-50 rounded-2xl border border-teal-200">

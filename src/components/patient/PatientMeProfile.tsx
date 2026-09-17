@@ -15,7 +15,10 @@ import {
   UserPlus,
   Trash2,
   AlertTriangle,
-  Camera
+  Camera,
+  KeyRound,
+  Copy,
+  Check
 } from 'lucide-react';
 import { PatientProfile, LanguageCode, TextScale } from '../../types';
 import { translations } from '../../lib/i18n';
@@ -61,8 +64,28 @@ export const PatientMeProfile: React.FC<PatientMeProfileProps> = ({
   const [isEditProfileOpen, setIsEditProfileOpen] = useState(false);
   const [isSelectCaregiverOpen, setIsSelectCaregiverOpen] = useState(false);
   const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false);
+  const [copiedKey, setCopiedKey] = useState(false);
 
   const hasCaregiver = Boolean(patient.caregiverName && patient.caregiverName !== 'Self' && patient.hasCaregiver !== false);
+
+  const handleCopyCaregiverKey = () => {
+    const key = patient.linkedCaregiverKey || '';
+    if (key && navigator.clipboard) {
+      navigator.clipboard.writeText(key);
+      setCopiedKey(true);
+      setTimeout(() => setCopiedKey(false), 2000);
+    }
+  };
+
+  const handleUnlinkCaregiver = () => {
+    const updated = {
+      ...patient,
+      caregiverName: 'Self',
+      caregiverPhone: '',
+      hasCaregiver: false,
+    };
+    onUpdatePatient(updated);
+  };
 
   const handleDeleteConfirmed = () => {
     if (onDeletePatient) {
@@ -216,7 +239,66 @@ export const PatientMeProfile: React.FC<PatientMeProfileProps> = ({
               <UserPlus className="w-3.5 h-3.5 text-teal-800" />
               <span>{hasCaregiver ? 'Change Caregiver' : '+ Add Caregiver'}</span>
             </button>
+
+            {hasCaregiver && (
+              <button
+                type="button"
+                onClick={handleUnlinkCaregiver}
+                className="px-3 py-2.5 rounded-2xl border border-rose-200 hover:bg-rose-50 text-rose-700 text-xs font-semibold transition flex items-center gap-1 shrink-0"
+                title="Unlink caregiver from this profile"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                <span>Unlink</span>
+              </button>
+            )}
           </div>
+        </div>
+
+        {/* Unique Caregiver Key section */}
+        <div className="p-4 rounded-2xl bg-teal-50/60 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="space-y-0.5">
+            <div className="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-teal-900 dark:text-teal-200">
+              <KeyRound className="w-3.5 h-3.5 text-teal-700 dark:text-teal-400" />
+              <span>Linked Caregiver Key</span>
+            </div>
+            <p className="text-xs text-stone-600 dark:text-stone-300">
+              {patient.linkedCaregiverKey
+                ? 'Your profile is securely linked to this Caregiver Key:'
+                : 'Connect with your caregiver by entering their unique Caregiver Key:'}
+            </p>
+            <div className="text-base font-mono font-bold tracking-widest text-teal-950 dark:text-teal-100 pt-0.5">
+              {patient.linkedCaregiverKey || 'Not Linked Yet'}
+            </div>
+          </div>
+
+          {patient.linkedCaregiverKey ? (
+            <button
+              type="button"
+              onClick={handleCopyCaregiverKey}
+              className="px-3.5 py-2 rounded-xl bg-teal-800 hover:bg-teal-900 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-xs shrink-0 active:scale-95"
+            >
+              {copiedKey ? (
+                <>
+                  <Check className="w-3.5 h-3.5 text-amber-300" />
+                  <span>Copied!</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>Copy Key</span>
+                </>
+              )}
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setIsSelectCaregiverOpen(true)}
+              className="px-3.5 py-2 rounded-xl bg-teal-800 hover:bg-teal-900 text-white text-xs font-bold transition flex items-center gap-1.5 shadow-xs shrink-0 active:scale-95"
+            >
+              <KeyRound className="w-3.5 h-3.5" />
+              <span>Enter Key</span>
+            </button>
+          )}
         </div>
 
         {!hasCaregiver && (

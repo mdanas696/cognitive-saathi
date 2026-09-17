@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { Play, Sparkles, CheckCircle2, Clock, Calendar, ShieldCheck, Heart, Volume2, Bot, MessageSquare, Flame, Plus } from 'lucide-react';
 import { PatientProfile, LanguageCode, GameDefinition, RoutineTask, ReminderItem } from '../../types';
-import { translations } from '../../lib/i18n';
+import { translations, getGameTranslation } from '../../lib/i18n';
 import { VoiceService } from '../../lib/voiceService';
 import { AddPatientTaskModal } from './AddPatientTaskModal';
 
@@ -28,8 +28,9 @@ export const PatientHome: React.FC<PatientHomeProps> = ({
   reminders,
   onOpenAiCompanion,
 }) => {
-  const t = translations[lang];
+  const t = translations[lang] || translations.en;
   const [showAddTaskModal, setShowAddTaskModal] = useState(false);
+  const localizedPrimary = getGameTranslation(primaryGame.id, lang);
 
   // Dynamic greeting based on current time
   const hour = new Date().getHours();
@@ -40,7 +41,7 @@ export const PatientHome: React.FC<PatientHomeProps> = ({
   const pendingMedicine = reminders.find((r) => r.type === 'MEDICINE' && !r.completedToday);
 
   const handleSpeakGreeting = () => {
-    const textToSpeak = `${greeting}, ${patient.preferredName}. Everything is peaceful. Today's gentle activity is ${primaryGame.title}. You have completed ${patient.todayCompletedCount} activities today.`;
+    const textToSpeak = `${greeting}, ${patient.preferredName || patient.fullName}. ${t.whoAmI} ${localizedPrimary.title}.`;
     VoiceService.speak(textToSpeak, lang);
   };
 
@@ -95,7 +96,7 @@ export const PatientHome: React.FC<PatientHomeProps> = ({
         </div>
       </div>
 
-      {/* Duolingo-Style Streak Tracker Banner (Day 5 of Journey) */}
+      {/* Duolingo-Style Streak Tracker Banner (Fully Dynamic) */}
       <div className="rounded-3xl bg-gradient-to-r from-amber-500 via-orange-500 to-amber-600 text-white p-5 sm:p-6 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3.5">
           <div className="w-13 h-13 rounded-2xl bg-white/20 backdrop-blur-xs flex items-center justify-center text-3xl shadow-inner shrink-0">
@@ -104,14 +105,18 @@ export const PatientHome: React.FC<PatientHomeProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <h3 className="text-xl sm:text-2xl font-black tracking-tight">
-                {patient.dailyStreak} Day Streak!
+                {(patient.dailyStreak || 0) <= 0
+                  ? 'Start Your Daily Streak!'
+                  : `${patient.dailyStreak} Day Streak!`}
               </h3>
               <span className="px-2.5 py-0.5 rounded-full bg-white/25 text-[11px] font-bold uppercase tracking-wider">
-                Day 5
+                Day {Math.max(1, patient.dailyStreak || 1)}
               </span>
             </div>
             <p className="text-amber-100 text-xs sm:text-sm mt-0.5 font-medium">
-              You're on fire! Complete your gentle activity today to keep your streak going.
+              {(patient.todayCompletedCount || 0) > 0
+                ? "Wonderful! You've completed your gentle exercise for today."
+                : "Complete your gentle activity today to build your streak."}
             </p>
           </div>
         </div>
@@ -119,21 +124,26 @@ export const PatientHome: React.FC<PatientHomeProps> = ({
         {/* 7-Day Flame Tracker Circles */}
         <div className="flex items-center gap-2 bg-black/15 backdrop-blur-xs px-3.5 py-2 rounded-2xl border border-white/20 self-stretch sm:self-auto justify-between sm:justify-start">
           {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map((day, idx) => {
-            const isCompleted = idx < patient.dailyStreak; // Days 1 to 5 checked
-            const isToday = idx === patient.dailyStreak - 1; // Day 5
+            const streakCount = patient.dailyStreak || 0;
+            const completedToday = (patient.todayCompletedCount || 0) > 0;
+            // How many days in the 7-day row are finished with flames
+            const completedPastDays = completedToday ? streakCount : Math.max(0, streakCount - 1);
+            const isCompleted = idx < completedPastDays;
+            const isToday = idx === Math.min(6, Math.max(0, (streakCount || 1) - 1));
+
             return (
               <div key={idx} className="flex flex-col items-center gap-1">
                 <span className="text-[10px] font-bold text-amber-100">{day}</span>
                 <div
                   className={`w-7 h-7 rounded-full flex items-center justify-center text-xs font-bold transition-transform ${
-                    isToday
+                    isToday && !completedToday
                       ? 'bg-white text-orange-600 ring-2 ring-amber-200 scale-110 shadow-xs'
-                      : isCompleted
+                      : isCompleted || (isToday && completedToday)
                       ? 'bg-amber-300 text-orange-950 font-bold'
                       : 'bg-white/20 text-white/50'
                   }`}
                 >
-                  {isCompleted ? '🔥' : '○'}
+                  {isCompleted || (isToday && completedToday) ? '🔥' : '○'}
                 </div>
               </div>
             );
@@ -147,12 +157,14 @@ export const PatientHome: React.FC<PatientHomeProps> = ({
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-teal-50 border border-teal-200/70 text-teal-900 text-xs font-bold uppercase tracking-wider">
             <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-            <span>TODAY'S GENTLE ACTIVITY</span>
+            <span>{t.todaysFocus || "TODAY'S GENTLE ACTIVITY"}</span>
           </div>
 
           <div className="flex items-center gap-1.5 text-stone-500 text-xs font-semibold">
             <Clock className="w-4 h-4 text-stone-400" />
-            <span>{primaryGame.estimatedMinutes || 3} minutes</span>
+            <span>
+              {primaryGame.estimatedMinutes || 3} {t.minutesUnit}
+            </span>
           </div>
         </div>
 
@@ -164,7 +176,7 @@ export const PatientHome: React.FC<PatientHomeProps> = ({
               <Sparkles className="w-7 h-7 text-amber-500" />
             </div>
             <span className="text-[11px] font-bold tracking-wider text-teal-900 uppercase leading-snug">
-              {primaryGame.culturalTag || 'ASSAMESE & NER HERITAGE'}
+              {localizedPrimary.culturalTag}
             </span>
           </div>
 
@@ -172,10 +184,10 @@ export const PatientHome: React.FC<PatientHomeProps> = ({
           <div className="space-y-4 flex-1">
             <div>
               <h3 className="text-2xl sm:text-3xl font-bold font-serif-heading text-stone-900">
-                {primaryGame.title}
+                {localizedPrimary.title}
               </h3>
               <p className="text-stone-600 text-sm sm:text-base leading-relaxed mt-2">
-                {primaryGame.shortDescription || 'Look at familiar items like the Japi and Bell-Metal Xorai, then recall what you saw.'}
+                {localizedPrimary.shortDescription}
               </p>
             </div>
 
@@ -183,17 +195,17 @@ export const PatientHome: React.FC<PatientHomeProps> = ({
               <button
                 id="start-activity-btn"
                 onClick={() => onStartGame(primaryGame.id)}
-                className="inline-flex items-center gap-2.5 px-6 py-3.5 rounded-2xl bg-teal-800 hover:bg-teal-900 text-white font-bold text-base shadow-sm transition active:scale-98"
+                className="inline-flex items-center gap-2.5 px-6 py-3.5 rounded-2xl bg-teal-800 hover:bg-teal-900 text-white font-bold text-base shadow-sm transition active:scale-98 cursor-pointer"
               >
                 <Play className="w-4 h-4 fill-current text-amber-300" />
-                <span>Start Activity</span>
+                <span>{t.startActivity}</span>
               </button>
 
               <button
                 onClick={() => onNavigateTab('activities')}
-                className="text-teal-800 hover:text-teal-950 font-semibold text-sm transition"
+                className="text-teal-800 hover:text-teal-950 font-semibold text-sm transition cursor-pointer"
               >
-                Explore other activities →
+                {t.backToActivities} →
               </button>
             </div>
           </div>
@@ -208,7 +220,7 @@ export const PatientHome: React.FC<PatientHomeProps> = ({
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-stone-500 text-xs font-bold uppercase tracking-wider">
                 <Calendar className="w-4 h-4 text-teal-700" />
-                <span>NEXT IN YOUR DAY</span>
+                <span>{t.myDayTitle}</span>
               </div>
               {onAddTask && (
                 <button

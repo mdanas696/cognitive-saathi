@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Plus, Clock, Heart, Trash2, CheckCircle2, ShieldCheck, X } from 'lucide-react';
 import { ReminderItem, ReminderType, LanguageCode } from '../../types';
 import { translations } from '../../lib/i18n';
+import { OfflineStore } from '../../lib/offlineStore';
 
 interface CaregiverRemindersProps {
   reminders: ReminderItem[];
@@ -30,9 +31,10 @@ export const CaregiverReminders: React.FC<CaregiverRemindersProps> = ({
     e.preventDefault();
     if (!newTitle.trim()) return;
 
+    const activePatientId = OfflineStore.getActivePatientId() || 'patient-senior-1';
     const item: ReminderItem = {
       id: `rem-${Date.now()}`,
-      patientId: 'patient-anima-72',
+      patientId: activePatientId,
       type: newType,
       title: newTitle.trim(),
       description: newDescription.trim() || 'Configured by caregiver',
@@ -58,7 +60,7 @@ export const CaregiverReminders: React.FC<CaregiverRemindersProps> = ({
             Caregiver Reminder Schedule
           </h2>
           <p className="text-sm text-stone-600 mt-0.5">
-            Configure supportive daily reminders that appear in Anima Devi's daily checklist.
+            Configure supportive daily reminders that appear in the patient's daily checklist.
           </p>
         </div>
 

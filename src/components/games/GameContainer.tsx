@@ -40,10 +40,11 @@ export const GameContainer: React.FC<GameContainerProps> = ({
     attempts: number,
     mistakes: number
   ) => {
+    const activePatientId = OfflineStore.getActivePatientId() || 'patient-senior-1';
     const result: GameSessionResult = {
       id: `sess-${Date.now()}`,
       gameId: game.id,
-      patientId: 'patient-anima-72',
+      patientId: activePatientId,
       difficulty,
       accuracy,
       reactionTimeMs,

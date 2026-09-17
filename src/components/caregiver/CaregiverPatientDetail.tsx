@@ -43,9 +43,9 @@ export const CaregiverPatientDetail: React.FC<CaregiverPatientDetailProps> = ({
 }) => {
   const t = translations[lang];
   const [notes, setNotes] = useState<string[]>([
-    'Anima was very happy recalling the Bihu memory story this morning.',
-    'Completed Morning BP tablet promptly with warm red tea.',
-    'Enjoyed looking at the Bell-Metal Xorai during Memory Recall exercise.',
+    'Patient was very happy recalling family memories this morning.',
+    'Completed Morning BP tablet promptly with warm tea.',
+    'Enjoyed looking at cultural artifacts during Memory Recall exercise.',
   ]);
   const [newNote, setNewNote] = useState('');
 
@@ -208,7 +208,7 @@ export const CaregiverPatientDetail: React.FC<CaregiverPatientDetailProps> = ({
         <form onSubmit={handleAddNote} className="flex gap-3">
           <input
             type="text"
-            placeholder="Add an observation (e.g., Anima was cheerful during morning walk)..."
+            placeholder="Add an observation (e.g., Patient was cheerful during morning walk)..."
             value={newNote}
             onChange={(e) => setNewNote(e.target.value)}
             className="flex-1 p-3 rounded-2xl border border-stone-300 bg-stone-50 text-sm text-stone-900 focus:outline-teal-700"

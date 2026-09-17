@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Smile, CheckCircle2 } from 'lucide-react';
 import { LanguageCode } from '../../types';
+import { AudioInstructionBanner } from '../common/AudioInstructionBanner';
 
 interface ObjectFamiliarityGameProps {
   difficulty: number;
@@ -10,6 +11,7 @@ interface ObjectFamiliarityGameProps {
 
 export const ObjectFamiliarityGame: React.FC<ObjectFamiliarityGameProps> = ({
   difficulty,
+  lang,
   onComplete,
 }) => {
   const [startTime] = useState<number>(Date.now());
@@ -49,6 +51,14 @@ export const ObjectFamiliarityGame: React.FC<ObjectFamiliarityGameProps> = ({
 
   return (
     <div className="space-y-6 max-w-xl mx-auto animate-fadeIn">
+      {/* Audio-First Instruction */}
+      <AudioInstructionBanner
+        instructionKey={mistakes > 0 ? 'instruction_try_again' : 'instruction_find_cup'}
+        lang={lang}
+        fallbackText={current.prompt}
+        autoPlayOnMount={false}
+      />
+
       <div className="p-4 bg-teal-50 rounded-2xl border border-teal-200 text-center">
         <div className="text-5xl my-2">{current.emoji}</div>
         <h3 className="text-xl font-bold font-serif-heading text-stone-900 mt-2">

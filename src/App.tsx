@@ -103,14 +103,42 @@ export default function App() {
     setTheme((prev) => (prev === 'light' ? 'dark' : 'light'));
   };
 
-  // Roles & View Navigation
+  // Roles & View Navigation (Persisted per tab session across refreshes)
   const [role, setRole] = useState<UserRole>(() => {
     const session = OfflineStore.getAuthSession();
-    return session?.role || 'PATIENT';
+    const tabState = OfflineStore.getTabNavigationState();
+    return tabState?.role || session?.role || 'PATIENT';
   });
-  const [patientTab, setPatientTab] = useState<'home' | 'activities' | 'my_day' | 'memories' | 'me' | 'settings'>('home');
-  const [caregiverTab, setCaregiverTab] = useState<'dashboard' | 'activities' | 'memories' | 'routine' | 'reminders' | 'patient_detail' | 'reports' | 'me'>('dashboard');
-  const [activeGame, setActiveGame] = useState<GameDefinition | null>(null);
+  const [patientTab, setPatientTab] = useState<'home' | 'activities' | 'my_day' | 'memories' | 'me' | 'settings'>(() => {
+    const tabState = OfflineStore.getTabNavigationState();
+    if (tabState?.patientTab) return tabState.patientTab;
+    return 'home';
+  });
+  const [caregiverTab, setCaregiverTab] = useState<'dashboard' | 'activities' | 'memories' | 'routine' | 'reminders' | 'patient_detail' | 'reports' | 'me'>(() => {
+    const tabState = OfflineStore.getTabNavigationState();
+    if (tabState?.caregiverTab) return tabState.caregiverTab;
+    return 'dashboard';
+  });
+  const [activeGame, setActiveGame] = useState<GameDefinition | null>(() => {
+    const tabState = OfflineStore.getTabNavigationState();
+    if (tabState?.activeGameId) {
+      const found = DEFAULT_GAMES.find((g) => g.id === tabState.activeGameId);
+      return found || null;
+    }
+    return null;
+  });
+
+  // Automatically synchronize tab state to sessionStorage on every navigation/tab change
+  useEffect(() => {
+    if (isLoggedIn) {
+      OfflineStore.saveTabNavigationState({
+        role,
+        patientTab,
+        caregiverTab,
+        activeGameId: activeGame ? activeGame.id : null,
+      });
+    }
+  }, [isLoggedIn, role, patientTab, caregiverTab, activeGame]);
 
   // Scroll isolation fix: reset scroll position whenever view, tab, or role changes
   useEffect(() => {
@@ -152,14 +180,13 @@ export default function App() {
 
   // Filter patients belonging to active caregiver (or all if not caregiver)
   const caregiverPatients = useMemo(() => {
-    if (!activeCaretaker) return (allPatients || []).filter(Boolean);
-    return (allPatients || []).filter(
+    if (!activeCaretaker) return allPatients;
+    return allPatients.filter(
       (p) =>
-        p &&
-        (activeCaretaker.assignedPatientIds?.includes(p.id) ||
-          (p.linkedCaregiverKey &&
-            activeCaretaker.caregiverKey &&
-            p.linkedCaregiverKey.toUpperCase() === activeCaretaker.caregiverKey.toUpperCase()))
+        activeCaretaker.assignedPatientIds?.includes(p.id) ||
+        (p.linkedCaregiverKey &&
+          activeCaretaker.caregiverKey &&
+          p.linkedCaregiverKey.toUpperCase() === activeCaretaker.caregiverKey.toUpperCase())
     );
   }, [allPatients, activeCaretaker]);
 
@@ -417,18 +444,51 @@ export default function App() {
       setCaregiverTab('dashboard');
     }
     setActiveGame(null);
+    const session = OfflineStore.getAuthSession();
+    if (session) {
+      session.role = targetRole;
+      OfflineStore.saveAuthSession(session);
+    }
+    OfflineStore.saveTabNavigationState({
+      role: targetRole,
+      patientTab: 'home',
+      caregiverTab: 'dashboard',
+      activeGameId: null,
+    });
   };
 
   const handleLockToPatient = () => {
     setRole('PATIENT');
     setPatientTab('home');
     setActiveGame(null);
+    const session = OfflineStore.getAuthSession();
+    if (session) {
+      session.role = 'PATIENT';
+      OfflineStore.saveAuthSession(session);
+    }
+    OfflineStore.saveTabNavigationState({
+      role: 'PATIENT',
+      patientTab: 'home',
+      caregiverTab: 'dashboard',
+      activeGameId: null,
+    });
   };
 
   const handleOpenDashboard = () => {
     setRole('CAREGIVER');
     setCaregiverTab('dashboard');
     setActiveGame(null);
+    const session = OfflineStore.getAuthSession();
+    if (session) {
+      session.role = 'CAREGIVER';
+      OfflineStore.saveAuthSession(session);
+    }
+    OfflineStore.saveTabNavigationState({
+      role: 'CAREGIVER',
+      patientTab: 'home',
+      caregiverTab: 'dashboard',
+      activeGameId: null,
+    });
   };
 
   const handleSaveNewPatient = (newPatient: PatientProfile) => {
@@ -529,8 +589,11 @@ export default function App() {
 
   const handleConfirmLogout = () => {
     OfflineStore.clearAuthSession();
+    OfflineStore.clearTabNavigationState();
     setIsLoggedIn(false);
     setActiveGame(null);
+    setPatientTab('home');
+    setCaregiverTab('dashboard');
     setIsLogoutConfirmOpen(false);
   };
 
@@ -541,6 +604,12 @@ export default function App() {
         theme={theme}
         onToggleTheme={toggleTheme}
         onLoginPatient={(loggedInPatient) => {
+          OfflineStore.saveTabNavigationState({
+            role: 'PATIENT',
+            patientTab: 'home',
+            caregiverTab: 'dashboard',
+            activeGameId: null,
+          });
           setPatient(loggedInPatient);
           setAllPatients(OfflineStore.getPatients());
           setRoutine(OfflineStore.getRoutine(loggedInPatient.id));
@@ -549,9 +618,16 @@ export default function App() {
           setSessions(OfflineStore.getSessions(loggedInPatient.id));
           setRole('PATIENT');
           setPatientTab('home');
+          setActiveGame(null);
           setIsLoggedIn(true);
         }}
         onLoginCaregiver={(caretaker, selectedPatient) => {
+          OfflineStore.saveTabNavigationState({
+            role: 'CAREGIVER',
+            patientTab: 'home',
+            caregiverTab: 'dashboard',
+            activeGameId: null,
+          });
           setActiveCaretaker(caretaker);
           setAllPatients(OfflineStore.getPatients());
           if (selectedPatient) {
@@ -585,6 +661,7 @@ export default function App() {
           }
           setRole('CAREGIVER');
           setCaregiverTab('dashboard');
+          setActiveGame(null);
           setIsLoggedIn(true);
         }}
         lang={lang}
@@ -843,29 +920,7 @@ export default function App() {
                   </div>
                 </div>
 
-                <ErrorBoundary
-                  key={caregiverTab}
-                  fallbackTitle={`Caregiver ${
-                    caregiverTab === 'dashboard'
-                      ? 'Overview'
-                      : caregiverTab === 'patient_detail'
-                      ? 'Patient Profile'
-                      : caregiverTab === 'routine'
-                      ? 'Routine Manager'
-                      : caregiverTab === 'reminders'
-                      ? 'Reminders'
-                      : caregiverTab === 'memories'
-                      ? 'Memories'
-                      : caregiverTab === 'reports'
-                      ? 'Clinical Reports'
-                      : caregiverTab === 'activities'
-                      ? 'Memory Workout'
-                      : caregiverTab === 'me'
-                      ? 'Profile & Settings'
-                      : 'Portal'
-                  }`}
-                  onReset={() => setCaregiverTab('dashboard')}
-                >
+                <ErrorBoundary fallbackTitle="Caregiver Dashboard" onReset={() => setCaregiverTab('dashboard')}>
                   {caregiverTab === 'dashboard' && (
                     <CaregiverDashboard
                       patient={patient}

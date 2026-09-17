@@ -1,4 +1,4 @@
-import { GameSessionResult, RoutineTask, ReminderItem, PatientProfile, CaretakerProfile, SyncEvent, MemoryMoment, GameDefinition, AuthSession } from '../types';
+import { GameSessionResult, RoutineTask, ReminderItem, PatientProfile, CaretakerProfile, SyncEvent, MemoryMoment, GameDefinition, AuthSession, TabNavigationState } from '../types';
 
 export const DEFAULT_PATIENTS: PatientProfile[] = [
   {
@@ -346,6 +346,7 @@ const STORAGE_KEYS = {
   HAS_INITIALIZED: 'cognitivesaathi_v3_has_initialized',
   DEMO_MODE_ACTIVE: 'cognitivesaathi_v3_demo_mode',
   SESSION: 'cognitivesaathi_v3_auth_session',
+  TAB_STATE: 'cognitivesaathi_v3_tab_navigation_state',
   PATIENT: 'cognitivesaathi_v3_patient',
   PATIENTS_LIST: 'cognitivesaathi_v3_patients_list',
   CARETAKERS_LIST: 'cognitivesaathi_v3_caretakers_list',
@@ -446,13 +447,21 @@ export class OfflineStore {
     }
   }
 
-  // Session Persistence (keeps user logged in across refresh / tab reopen)
+  // Session Persistence (Strictly scoped to current tab/window via sessionStorage)
+  // Ensures:
+  // 1. Refreshing in the current tab preserves the session and exact subpage/tab (e.g. memories)
+  // 2. Opening the app link in a new tab or other page starts fresh and shows the login screen
   static getAuthSession(): AuthSession | null {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.SESSION);
+      // Clear legacy localStorage session key to prevent cross-tab session leakage
+      if (typeof window !== 'undefined' && window.localStorage) {
+        window.localStorage.removeItem(STORAGE_KEYS.SESSION);
+      }
+      if (typeof window === 'undefined' || !window.sessionStorage) return null;
+      const data = sessionStorage.getItem(STORAGE_KEYS.SESSION);
       if (!data) return null;
       const session: AuthSession = JSON.parse(data);
-      // Valid persistent session
+      // Check session expiry
       if (session.expiresAt && Date.now() > session.expiresAt) {
         this.clearAuthSession();
         return null;
@@ -465,12 +474,16 @@ export class OfflineStore {
 
   static saveAuthSession(session: AuthSession): void {
     try {
-      // Keep session persistent across reloads (default 365 days if not set)
-      const persistentSession: AuthSession = {
+      if (typeof window === 'undefined' || !window.sessionStorage) return;
+      const tabSession: AuthSession = {
         ...session,
-        expiresAt: session.expiresAt || Date.now() + 365 * 24 * 60 * 60 * 1000,
+        expiresAt: session.expiresAt || Date.now() + 24 * 60 * 60 * 1000,
       };
-      localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(persistentSession));
+      sessionStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(tabSession));
+      // Remove from localStorage to prevent leaking across other tabs
+      if (window.localStorage) {
+        window.localStorage.removeItem(STORAGE_KEYS.SESSION);
+      }
     } catch (e) {
       console.warn('Session save error:', e);
     }
@@ -478,9 +491,47 @@ export class OfflineStore {
 
   static clearAuthSession(): void {
     try {
-      localStorage.removeItem(STORAGE_KEYS.SESSION);
+      if (typeof window !== 'undefined') {
+        if (window.sessionStorage) {
+          sessionStorage.removeItem(STORAGE_KEYS.SESSION);
+          sessionStorage.removeItem(STORAGE_KEYS.TAB_STATE);
+          sessionStorage.removeItem(STORAGE_KEYS.ACTIVE_PATIENT_ID);
+        }
+        if (window.localStorage) {
+          localStorage.removeItem(STORAGE_KEYS.SESSION);
+        }
+      }
     } catch (e) {
       console.warn('Session clear error:', e);
+    }
+  }
+
+  static getTabNavigationState(): TabNavigationState | null {
+    try {
+      if (typeof window === 'undefined' || !window.sessionStorage) return null;
+      const data = sessionStorage.getItem(STORAGE_KEYS.TAB_STATE);
+      if (!data) return null;
+      return JSON.parse(data);
+    } catch {
+      return null;
+    }
+  }
+
+  static saveTabNavigationState(state: TabNavigationState): void {
+    try {
+      if (typeof window === 'undefined' || !window.sessionStorage) return;
+      sessionStorage.setItem(STORAGE_KEYS.TAB_STATE, JSON.stringify(state));
+    } catch (e) {
+      console.warn('Tab navigation state save error:', e);
+    }
+  }
+
+  static clearTabNavigationState(): void {
+    try {
+      if (typeof window === 'undefined' || !window.sessionStorage) return;
+      sessionStorage.removeItem(STORAGE_KEYS.TAB_STATE);
+    } catch (e) {
+      console.warn('Tab navigation state clear error:', e);
     }
   }
 
@@ -580,6 +631,10 @@ export class OfflineStore {
 
   static getActivePatientId(): string {
     try {
+      const session = this.getAuthSession();
+      if (session?.patientId) return session.patientId;
+      const tabSaved = typeof window !== 'undefined' && window.sessionStorage ? sessionStorage.getItem(STORAGE_KEYS.ACTIVE_PATIENT_ID) : null;
+      if (tabSaved) return tabSaved;
       const saved = localStorage.getItem(STORAGE_KEYS.ACTIVE_PATIENT_ID);
       if (saved) return saved;
       const list = this.getPatients();
@@ -591,6 +646,9 @@ export class OfflineStore {
 
   static setActivePatientId(id: string): void {
     try {
+      if (typeof window !== 'undefined' && window.sessionStorage) {
+        sessionStorage.setItem(STORAGE_KEYS.ACTIVE_PATIENT_ID, id);
+      }
       localStorage.setItem(STORAGE_KEYS.ACTIVE_PATIENT_ID, id);
       const session = this.getAuthSession();
       if (session) {

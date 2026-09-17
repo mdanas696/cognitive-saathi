@@ -26,262 +26,22 @@ import {
   User,
 } from 'lucide-react';
 import { LinkPatientKeyModal } from './LinkPatientKeyModal';
+import {
+  ResponsiveContainer,
+  BarChart,
+  Bar,
+  XAxis,
+  YAxis,
+  Tooltip,
+  CartesianGrid,
+  LineChart,
+  Line,
+} from 'recharts';
 import { PatientProfile, CaretakerProfile, ReminderItem, GameSessionResult, RoutineTask, LanguageCode } from '../../types';
 import { translations } from '../../lib/i18n';
 import { OfflineStore } from '../../lib/offlineStore';
 import { CaretakerRoutineManager } from './CaretakerRoutineManager';
 import { ElderAvatar } from '../common/ElderAvatar';
-
-// 100% crash-proof responsive SVG Bar Chart for Weekly Activity
-const WeeklySessionsChart: React.FC<{ data: { day: string; sessions: number; adherence: number }[] }> = ({ data }) => {
-  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
-  const maxSessions = Math.max(...data.map((d) => d.sessions), 4);
-  const chartHeight = 170;
-  const chartWidth = 500;
-  const paddingX = 40;
-  const paddingBottom = 32;
-  const paddingTop = 24;
-  const availableWidth = chartWidth - paddingX * 2;
-  const availableHeight = chartHeight - paddingTop - paddingBottom;
-  const step = availableWidth / (data.length || 1);
-  const barWidth = Math.min(32, step * 0.55);
-
-  return (
-    <div className="w-full relative select-none">
-      <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="w-full h-56 sm:h-64 overflow-visible">
-        {/* Horizontal grid lines */}
-        {[0, 1, 2, 3, 4].map((gridLevel) => {
-          const val = Math.round((gridLevel / 4) * maxSessions);
-          const y = paddingTop + availableHeight - (gridLevel / 4) * availableHeight;
-          return (
-            <g key={gridLevel}>
-              <line
-                x1={paddingX}
-                y1={y}
-                x2={chartWidth - paddingX}
-                y2={y}
-                stroke="#E5E7EB"
-                strokeDasharray="4 4"
-                strokeWidth="1"
-              />
-              <text
-                x={paddingX - 10}
-                y={y + 4}
-                textAnchor="end"
-                className="text-[10px] fill-stone-400 font-mono"
-              >
-                {val}
-              </text>
-            </g>
-          );
-        })}
-
-        {/* Bars */}
-        {data.map((item, i) => {
-          const barHeight = (item.sessions / maxSessions) * availableHeight;
-          const x = paddingX + i * step + (step - barWidth) / 2;
-          const y = paddingTop + availableHeight - barHeight;
-          const isHovered = hoveredIndex === i;
-
-          return (
-            <g
-              key={item.day}
-              onMouseEnter={() => setHoveredIndex(i)}
-              onMouseLeave={() => setHoveredIndex(null)}
-              className="cursor-pointer"
-            >
-              {isHovered && (
-                <rect
-                  x={paddingX + i * step}
-                  y={paddingTop}
-                  width={step}
-                  height={availableHeight}
-                  fill="#f0fdfa"
-                  rx="6"
-                  opacity="0.8"
-                />
-              )}
-              <rect
-                x={x}
-                y={y}
-                width={barWidth}
-                height={Math.max(4, barHeight)}
-                rx="6"
-                fill={isHovered ? '#115e59' : '#0f766e'}
-                className="transition-colors duration-200"
-              />
-              {isHovered && (
-                <text
-                  x={x + barWidth / 2}
-                  y={Math.max(14, y - 6)}
-                  textAnchor="middle"
-                  className="text-[11px] font-bold fill-teal-900 font-sans"
-                >
-                  {item.sessions} ({item.adherence}%)
-                </text>
-              )}
-              <text
-                x={x + barWidth / 2}
-                y={chartHeight - 8}
-                textAnchor="middle"
-                className={`text-[11px] font-sans ${isHovered ? 'font-bold fill-teal-900' : 'fill-stone-500'}`}
-              >
-                {item.day}
-              </text>
-            </g>
-          );
-        })}
-      </svg>
-      <div className="flex items-center justify-between text-xs text-stone-500 pt-2 px-2 border-t border-stone-100">
-        <span className="flex items-center gap-1.5">
-          <span className="w-3 h-3 rounded-xs bg-[#0f766e] inline-block" />
-          <span>Completed Sessions</span>
-        </span>
-        <span>Hover for daily adherence %</span>
-      </div>
-    </div>
-  );
-};
-
-// 100% crash-proof responsive SVG Line Chart for Category Consistency
-const CategoryEngagementChart: React.FC<{ data: { category: string; score: number }[] }> = ({ data }) => {
-  const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
-  const minScore = 60;
-  const maxScore = 100;
-  const chartHeight = 170;
-  const chartWidth = 500;
-  const paddingX = 50;
-  const paddingBottom = 32;
-  const paddingTop = 24;
-  const availableWidth = chartWidth - paddingX * 2;
-  const availableHeight = chartHeight - paddingTop - paddingBottom;
-  const step = availableWidth / (data.length > 1 ? data.length - 1 : 1);
-
-  const points = data.map((d, i) => {
-    const x = paddingX + i * step;
-    const y = paddingTop + availableHeight - ((d.score - minScore) / (maxScore - minScore)) * availableHeight;
-    return { x, y, ...d };
-  });
-
-  const polylinePoints = points.map((p) => `${p.x},${p.y}`).join(' ');
-
-  return (
-    <div className="w-full relative select-none">
-      <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="w-full h-56 sm:h-64 overflow-visible">
-        <defs>
-          <linearGradient id="amberGradient" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#d97706" stopOpacity="0.3" />
-            <stop offset="100%" stopColor="#d97706" stopOpacity="0.0" />
-          </linearGradient>
-        </defs>
-
-        {/* Horizontal grid lines */}
-        {[60, 70, 80, 90, 100].map((scoreVal) => {
-          const y = paddingTop + availableHeight - ((scoreVal - minScore) / (maxScore - minScore)) * availableHeight;
-          return (
-            <g key={scoreVal}>
-              <line
-                x1={paddingX}
-                y1={y}
-                x2={chartWidth - paddingX}
-                y2={y}
-                stroke="#E5E7EB"
-                strokeDasharray="4 4"
-                strokeWidth="1"
-              />
-              <text
-                x={paddingX - 10}
-                y={y + 4}
-                textAnchor="end"
-                className="text-[10px] fill-stone-400 font-mono"
-              >
-                {scoreVal}%
-              </text>
-            </g>
-          );
-        })}
-
-        {/* Shaded Area under curve */}
-        {points.length > 0 && (
-          <polygon
-            points={`${points[0].x},${paddingTop + availableHeight} ${polylinePoints} ${points[points.length - 1].x},${paddingTop + availableHeight}`}
-            fill="url(#amberGradient)"
-          />
-        )}
-
-        {/* Trend line */}
-        <polyline
-          fill="none"
-          stroke="#d97706"
-          strokeWidth="3"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          points={polylinePoints}
-        />
-
-        {/* Data points */}
-        {points.map((p, i) => {
-          const isHovered = hoveredIndex === i;
-          return (
-            <g
-              key={p.category}
-              onMouseEnter={() => setHoveredIndex(i)}
-              onMouseLeave={() => setHoveredIndex(null)}
-              className="cursor-pointer"
-            >
-              <circle cx={p.x} cy={p.y} r="16" fill="transparent" />
-              <circle
-                cx={p.x}
-                cy={p.y}
-                r={isHovered ? 7 : 5}
-                fill="#d97706"
-                stroke="#fff"
-                strokeWidth="2"
-                className="transition-all duration-150 shadow-xs"
-              />
-              {isHovered && (
-                <g>
-                  <rect
-                    x={p.x - 26}
-                    y={Math.max(4, p.y - 28)}
-                    width="52"
-                    height="20"
-                    rx="6"
-                    fill="#78350f"
-                    className="shadow-md"
-                  />
-                  <text
-                    x={p.x}
-                    y={Math.max(18, p.y - 14)}
-                    textAnchor="middle"
-                    className="text-[11px] font-bold fill-amber-200 font-mono"
-                  >
-                    {p.score}%
-                  </text>
-                </g>
-              )}
-              <text
-                x={p.x}
-                y={chartHeight - 8}
-                textAnchor="middle"
-                className={`text-[11px] font-sans ${isHovered ? 'font-bold fill-amber-900' : 'fill-stone-500'}`}
-              >
-                {p.category}
-              </text>
-            </g>
-          );
-        })}
-      </svg>
-      <div className="flex items-center justify-between text-xs text-stone-500 pt-2 px-2 border-t border-stone-100">
-        <span className="flex items-center gap-1.5">
-          <span className="w-3 h-3 rounded-full bg-[#d97706] inline-block" />
-          <span>Completion Measure</span>
-        </span>
-        <span>Target: &ge; 75% consistency</span>
-      </div>
-    </div>
-  );
-};
 
 interface CaregiverDashboardProps {
   patient: PatientProfile;
@@ -408,10 +168,10 @@ export const CaregiverDashboard: React.FC<CaregiverDashboardProps> = ({
     { category: 'Routine', score: 90 },
   ];
 
-  const safeReminders = Array.isArray(reminders) ? reminders.filter(Boolean) : [];
-  const safeSessions = Array.isArray(sessions) ? sessions.filter(Boolean) : [];
-  const safeRoutine = Array.isArray(routine) ? routine.filter(Boolean) : [];
-  const safePatients = Array.isArray(allPatients) ? allPatients.filter(Boolean) : [];
+  const safeReminders = Array.isArray(reminders) ? reminders : [];
+  const safeSessions = Array.isArray(sessions) ? sessions : [];
+  const safeRoutine = Array.isArray(routine) ? routine : [];
+  const safePatients = Array.isArray(allPatients) ? allPatients : [];
 
   const activeP = (patient && patient.fullName) ? patient : (safePatients.length > 0 ? safePatients[0] : null);
 
@@ -1044,8 +804,19 @@ export const CaregiverDashboard: React.FC<CaregiverDashboardProps> = ({
             </span>
           </div>
 
-          <div className="w-full pt-2">
-            <WeeklySessionsChart data={weeklyData} />
+          <div className="h-64 w-full pt-4">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={weeklyData}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+                <XAxis dataKey="day" stroke="#6B7280" fontSize={12} tickLine={false} />
+                <YAxis stroke="#6B7280" fontSize={12} tickLine={false} allowDecimals={false} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#134e48', color: '#fff', borderRadius: '12px', border: 'none' }}
+                  itemStyle={{ color: '#fef3c7' }}
+                />
+                <Bar dataKey="sessions" fill="#0f766e" radius={[6, 6, 0, 0]} name="Sessions" />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         </div>
 
@@ -1061,8 +832,26 @@ export const CaregiverDashboard: React.FC<CaregiverDashboardProps> = ({
             </span>
           </div>
 
-          <div className="w-full pt-2">
-            <CategoryEngagementChart data={categoryData} />
+          <div className="h-64 w-full pt-4">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={categoryData}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+                <XAxis dataKey="category" stroke="#6B7280" fontSize={12} tickLine={false} />
+                <YAxis stroke="#6B7280" fontSize={12} tickLine={false} domain={[60, 100]} />
+                <Tooltip
+                  contentStyle={{ backgroundColor: '#134e48', color: '#fff', borderRadius: '12px', border: 'none' }}
+                  itemStyle={{ color: '#fef3c7' }}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="score"
+                  stroke="#d97706"
+                  strokeWidth={3}
+                  dot={{ fill: '#d97706', r: 5 }}
+                  name="Completion %"
+                />
+              </LineChart>
+            </ResponsiveContainer>
           </div>
         </div>
       </div>

@@ -177,6 +177,13 @@ export interface AuthSession {
   userName?: string;
 }
 
+export interface TabNavigationState {
+  role?: UserRole;
+  patientTab?: 'home' | 'activities' | 'my_day' | 'memories' | 'me' | 'settings';
+  caregiverTab?: 'dashboard' | 'activities' | 'memories' | 'routine' | 'reminders' | 'patient_detail' | 'reports' | 'me';
+  activeGameId?: string | null;
+}
+
 export interface SyncEvent {
   clientEventId: string;
   eventType: 'GAME_COMPLETED' | 'ROUTINE_UPDATED' | 'REMINDER_TOGGLED';

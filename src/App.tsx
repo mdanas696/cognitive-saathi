@@ -180,13 +180,14 @@ export default function App() {
 
   // Filter patients belonging to active caregiver (or all if not caregiver)
   const caregiverPatients = useMemo(() => {
-    if (!activeCaretaker) return allPatients;
-    return allPatients.filter(
+    if (!activeCaretaker) return (allPatients || []).filter(Boolean);
+    return (allPatients || []).filter(
       (p) =>
-        activeCaretaker.assignedPatientIds?.includes(p.id) ||
-        (p.linkedCaregiverKey &&
-          activeCaretaker.caregiverKey &&
-          p.linkedCaregiverKey.toUpperCase() === activeCaretaker.caregiverKey.toUpperCase())
+        p &&
+        (activeCaretaker.assignedPatientIds?.includes(p.id) ||
+          (p.linkedCaregiverKey &&
+            activeCaretaker.caregiverKey &&
+            p.linkedCaregiverKey.toUpperCase() === activeCaretaker.caregiverKey.toUpperCase()))
     );
   }, [allPatients, activeCaretaker]);
 
@@ -920,7 +921,29 @@ export default function App() {
                   </div>
                 </div>
 
-                <ErrorBoundary fallbackTitle="Caregiver Dashboard" onReset={() => setCaregiverTab('dashboard')}>
+                <ErrorBoundary
+                  key={caregiverTab}
+                  fallbackTitle={`Caregiver ${
+                    caregiverTab === 'dashboard'
+                      ? 'Overview'
+                      : caregiverTab === 'patient_detail'
+                      ? 'Patient Profile'
+                      : caregiverTab === 'routine'
+                      ? 'Routine Manager'
+                      : caregiverTab === 'reminders'
+                      ? 'Reminders'
+                      : caregiverTab === 'memories'
+                      ? 'Memories'
+                      : caregiverTab === 'reports'
+                      ? 'Clinical Reports'
+                      : caregiverTab === 'activities'
+                      ? 'Memory Workout'
+                      : caregiverTab === 'me'
+                      ? 'Profile & Settings'
+                      : 'Portal'
+                  }`}
+                  onReset={() => setCaregiverTab('dashboard')}
+                >
                   {caregiverTab === 'dashboard' && (
                     <CaregiverDashboard
                       patient={patient}

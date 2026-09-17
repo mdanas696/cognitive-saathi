@@ -19,9 +19,9 @@ import { VoiceService } from '../../lib/voiceService';
 
 interface CaregiverMemoriesManagerProps {
   patient: PatientProfile;
-  memories: MemoryMoment[];
-  onAddMemory: (memory: MemoryMoment) => void;
-  onDeleteMemory: (id: string) => void;
+  memories?: MemoryMoment[];
+  onAddMemory?: (memory: MemoryMoment) => void;
+  onDeleteMemory?: (id: string) => void;
   lang?: LanguageCode;
 }
 
@@ -101,10 +101,12 @@ export const CaregiverMemoriesManager: React.FC<CaregiverMemoriesManagerProps> =
 
   const categories = ['All', 'Family', 'Festival', 'Place', 'Tradition'];
 
+  const safeMemories = Array.isArray(memories) ? memories.filter(Boolean) : [];
+
   const filteredMemories =
     selectedCategory === 'All'
-      ? memories
-      : memories.filter((m) => m.category.toLowerCase() === selectedCategory.toLowerCase());
+      ? safeMemories
+      : safeMemories.filter((m) => m && m.category && m.category.toLowerCase() === selectedCategory.toLowerCase());
 
   const handlePreviewVoice = (memory: MemoryMoment) => {
     if (playingMemoryId === memory.id) {
@@ -230,7 +232,7 @@ export const CaregiverMemoriesManager: React.FC<CaregiverMemoriesManagerProps> =
         </div>
 
         <span className="text-xs text-stone-500 font-medium">
-          Showing {filteredMemories.length} of {memories.length} moments
+          Showing {filteredMemories.length} of {safeMemories.length} moments
         </span>
       </div>
 

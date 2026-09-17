@@ -85,12 +85,13 @@ app.post('/api/auth/register', (req, res) => {
     }
 
     const cleanPhone = phone.replace(/\D/g, '');
-    if (cleanPhone.length < 10) {
-      res.status(400).json({ error: 'Please enter a valid 10-digit mobile number.' });
+    const actualDigits = cleanPhone.startsWith('91') && cleanPhone.length === 12 ? cleanPhone.slice(2) : cleanPhone;
+    if (actualDigits.length !== 10) {
+      res.status(400).json({ error: 'Mobile number must have actually 10 digits.' });
       return;
     }
 
-    if (ServerDB.isPhoneTaken(cleanPhone)) {
+    if (ServerDB.isPhoneTaken(actualDigits)) {
       res.status(400).json({ error: 'This mobile number is already registered. Please log in instead.' });
       return;
     }
@@ -185,6 +186,17 @@ app.post('/api/auth/login', (req, res) => {
     }
 
     const cleanInput = String(identifier).trim();
+
+    // If identifier is entered as a mobile number, verify it has actually 10 digits
+    const digitsOnly = cleanInput.replace(/\D/g, '');
+    const isPhoneAttempt = /^[0-9+\s()-]+$/.test(cleanInput) && digitsOnly.length > 0;
+    if (isPhoneAttempt) {
+      const actualDigits = digitsOnly.startsWith('91') && digitsOnly.length === 12 ? digitsOnly.slice(2) : digitsOnly;
+      if (actualDigits.length !== 10) {
+        res.status(400).json({ error: 'Mobile number must have actually 10 digits.' });
+        return;
+      }
+    }
 
     if (role === 'PATIENT') {
       const patient = ServerDB.findPatient(cleanInput);
@@ -281,6 +293,104 @@ app.post('/api/patients/:id/link-caregiver', (req, res) => {
     res.json(result);
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to link caregiver', details: err?.message });
+  }
+});
+
+// Unlink caregiver from patient
+app.post('/api/patients/:id/unlink-caregiver', (req, res) => {
+  try {
+    const result = ServerDB.unlinkCaregiver(req.params.id);
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to unlink caregiver', details: err?.message });
+  }
+});
+
+// Synchronized Routines APIs
+app.get('/api/routines/:patientId', (req, res) => {
+  res.json(ServerDB.getRoutines(req.params.patientId));
+});
+
+app.post('/api/routines/:patientId', (req, res) => {
+  const routines = req.body;
+  if (!Array.isArray(routines)) {
+    res.status(400).json({ error: 'Routines must be an array' });
+    return;
+  }
+  const updated = ServerDB.saveRoutines(req.params.patientId, routines);
+  res.json(updated);
+});
+
+// Synchronized Reminders APIs
+app.get('/api/reminders/:patientId', (req, res) => {
+  res.json(ServerDB.getReminders(req.params.patientId));
+});
+
+app.post('/api/reminders/:patientId', (req, res) => {
+  const reminders = req.body;
+  if (!Array.isArray(reminders)) {
+    res.status(400).json({ error: 'Reminders must be an array' });
+    return;
+  }
+  const updated = ServerDB.saveReminders(req.params.patientId, reminders);
+  res.json(updated);
+});
+
+// Real-time Unified 5-10s Synchronization Endpoint
+app.get('/api/sync', (req, res) => {
+  try {
+    const { role, caretakerId, patientId } = req.query as {
+      role?: string;
+      caretakerId?: string;
+      patientId?: string;
+    };
+
+    const patients = ServerDB.getPatients();
+    const caretakers = ServerDB.getCaretakers();
+
+    let targetCaretaker = caretakerId
+      ? caretakers.find((c) => c.id === caretakerId)
+      : undefined;
+    let targetPatient = patientId
+      ? patients.find((p) => p.id === patientId)
+      : undefined;
+
+    // Filter patients assigned or linked to this caregiver
+    let assignedPatients: any[] = [];
+    if (targetCaretaker) {
+      assignedPatients = patients.filter(
+        (p) =>
+          targetCaretaker?.assignedPatientIds?.includes(p.id) ||
+          (p.linkedCaregiverKey &&
+            targetCaretaker?.caregiverKey &&
+            p.linkedCaregiverKey.toUpperCase() === targetCaretaker.caregiverKey.toUpperCase())
+      );
+    }
+
+    // Resolve patient to sync
+    const activePatId = targetPatient?.id || (assignedPatients.length > 0 ? assignedPatients[0].id : undefined);
+
+    const memories = activePatId ? ServerDB.getMemories(activePatId) : [];
+    const sessions = activePatId ? ServerDB.getSessions(activePatId) : [];
+    const routines = activePatId ? ServerDB.getRoutines(activePatId) : [];
+    const reminders = activePatId ? ServerDB.getReminders(activePatId) : [];
+
+    res.json({
+      success: true,
+      timestamp: Date.now(),
+      patients,
+      caretakers,
+      targetCaretaker,
+      targetPatient,
+      assignedPatients,
+      activePatId,
+      memories,
+      sessions,
+      routines,
+      reminders,
+    });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Sync failed', details: err?.message });
   }
 });
 

@@ -116,6 +116,46 @@ export class ServerDB {
     return defaultDb;
   }
 
+  static ensureMutualConsistency(db: DatabaseSchema): boolean {
+    let changed = false;
+    for (const patient of db.patients) {
+      if (patient.linkedCaregiverKey) {
+        const keyClean = patient.linkedCaregiverKey.trim().toUpperCase();
+        const ct = db.caretakers.find((c) => (c.caregiverKey || '').trim().toUpperCase() === keyClean);
+        if (ct) {
+          if (!ct.assignedPatientIds) ct.assignedPatientIds = [];
+          if (!ct.assignedPatientIds.includes(patient.id)) {
+            ct.assignedPatientIds.push(patient.id);
+            changed = true;
+          }
+          if (!patient.hasCaregiver) {
+            patient.hasCaregiver = true;
+            patient.caregiverName = `${ct.fullName} (${ct.relation || 'Caregiver'})`;
+            patient.caregiverPhone = ct.phone;
+            changed = true;
+          }
+        }
+      }
+    }
+    for (const ct of db.caretakers) {
+      if (ct.assignedPatientIds && ct.assignedPatientIds.length > 0) {
+        for (const pId of ct.assignedPatientIds) {
+          const p = db.patients.find((pat) => pat.id === pId);
+          if (p) {
+            if ((p.linkedCaregiverKey || '').trim().toUpperCase() !== (ct.caregiverKey || '').trim().toUpperCase()) {
+              p.linkedCaregiverKey = ct.caregiverKey;
+              p.hasCaregiver = true;
+              p.caregiverName = `${ct.fullName} (${ct.relation || 'Caregiver'})`;
+              p.caregiverPhone = ct.phone;
+              changed = true;
+            }
+          }
+        }
+      }
+    }
+    return changed;
+  }
+
   private static save(db: DatabaseSchema): void {
     try {
       if (!fs.existsSync(DB_DIR)) {
@@ -130,11 +170,17 @@ export class ServerDB {
 
   static getPatients(): PatientProfile[] {
     const db = this.ensureDbExists();
+    if (this.ensureMutualConsistency(db)) {
+      this.save(db);
+    }
     return db.patients;
   }
 
   static getCaretakers(): CaretakerProfile[] {
     const db = this.ensureDbExists();
+    if (this.ensureMutualConsistency(db)) {
+      this.save(db);
+    }
     return db.caretakers;
   }
 
@@ -214,6 +260,7 @@ export class ServerDB {
       db.patients.push(patient);
     }
 
+    this.ensureMutualConsistency(db);
     this.save(db);
     return patient;
   }
@@ -228,6 +275,7 @@ export class ServerDB {
       db.caretakers.push(caretaker);
     }
 
+    this.ensureMutualConsistency(db);
     this.save(db);
     return caretaker;
   }
@@ -237,12 +285,13 @@ export class ServerDB {
     patientIdentifier: string
   ): { success: boolean; error?: string; caretaker?: CaretakerProfile; patient?: PatientProfile } {
     const db = this.ensureDbExists();
-    const caretaker = db.caretakers.find((c) => c.id === caretakerId);
+    const caretaker = this.findCaretaker(caretakerId) || db.caretakers.find((c) => c.id === caretakerId);
     if (!caretaker) return { success: false, error: 'Caregiver not found.' };
 
     const patient = this.findPatient(patientIdentifier);
     if (!patient) return { success: false, error: 'No patient found with that key, mobile number, or username.' };
 
+    if (!caretaker.assignedPatientIds) caretaker.assignedPatientIds = [];
     if (!caretaker.assignedPatientIds.includes(patient.id)) {
       caretaker.assignedPatientIds.push(patient.id);
     }
@@ -252,6 +301,7 @@ export class ServerDB {
     patient.caregiverPhone = caretaker.phone;
     patient.hasCaregiver = true;
 
+    this.ensureMutualConsistency(db);
     this.save(db);
     return { success: true, caretaker, patient };
   }
@@ -261,15 +311,16 @@ export class ServerDB {
     caregiverKey: string
   ): { success: boolean; error?: string; caretaker?: CaretakerProfile; patient?: PatientProfile } {
     const db = this.ensureDbExists();
-    const patient = db.patients.find((p) => p.id === patientId);
+    const patient = this.findPatient(patientId) || db.patients.find((p) => p.id === patientId);
     if (!patient) return { success: false, error: 'Patient not found.' };
 
     const keyClean = caregiverKey.trim().toUpperCase();
-    const caretaker = db.caretakers.find(
+    const caretaker = this.findCaretaker(keyClean) || db.caretakers.find(
       (c) => (c.caregiverKey || '').toUpperCase() === keyClean
     );
-    if (!caretaker) return { success: false, error: 'No caregiver found with that Caregiver Key.' };
+    if (!caretaker) return { success: false, error: `No caregiver found with key "${caregiverKey}".` };
 
+    if (!caretaker.assignedPatientIds) caretaker.assignedPatientIds = [];
     if (!caretaker.assignedPatientIds.includes(patient.id)) {
       caretaker.assignedPatientIds.push(patient.id);
     }
@@ -279,8 +330,55 @@ export class ServerDB {
     patient.caregiverPhone = caretaker.phone;
     patient.hasCaregiver = true;
 
+    this.ensureMutualConsistency(db);
     this.save(db);
     return { success: true, caretaker, patient };
+  }
+
+  static unlinkCaregiver(
+    patientId: string
+  ): { success: boolean; patient?: PatientProfile } {
+    const db = this.ensureDbExists();
+    const patient = this.findPatient(patientId) || db.patients.find((p) => p.id === patientId);
+    if (!patient) return { success: false };
+
+    patient.linkedCaregiverKey = '';
+    patient.hasCaregiver = false;
+    patient.caregiverName = 'Self';
+    patient.caregiverPhone = '';
+
+    for (const ct of db.caretakers) {
+      if (ct.assignedPatientIds) {
+        ct.assignedPatientIds = ct.assignedPatientIds.filter((id) => id !== patient.id);
+      }
+    }
+
+    this.save(db);
+    return { success: true, patient };
+  }
+
+  static getRoutines(patientId: string): RoutineTask[] {
+    const db = this.ensureDbExists();
+    return db.routines[patientId] || [];
+  }
+
+  static saveRoutines(patientId: string, routines: RoutineTask[]): RoutineTask[] {
+    const db = this.ensureDbExists();
+    db.routines[patientId] = routines;
+    this.save(db);
+    return routines;
+  }
+
+  static getReminders(patientId: string): ReminderItem[] {
+    const db = this.ensureDbExists();
+    return db.reminders[patientId] || [];
+  }
+
+  static saveReminders(patientId: string, reminders: ReminderItem[]): ReminderItem[] {
+    const db = this.ensureDbExists();
+    db.reminders[patientId] = reminders;
+    this.save(db);
+    return reminders;
   }
 
   static getMemories(patientId: string): MemoryMoment[] {
@@ -293,7 +391,7 @@ export class ServerDB {
     if (!db.memories[patientId]) {
       db.memories[patientId] = [];
     }
-    db.memories[patientId] = [memory, ...db.memories[patientId]];
+    db.memories[patientId] = [memory, ...db.memories[patientId].filter((m) => m.id !== memory.id)];
     this.save(db);
     return db.memories[patientId];
   }
@@ -318,7 +416,7 @@ export class ServerDB {
     if (!db.sessions[patientId]) {
       db.sessions[patientId] = [];
     }
-    db.sessions[patientId] = [session, ...db.sessions[patientId]];
+    db.sessions[patientId] = [session, ...db.sessions[patientId].filter((s) => s.id !== session.id)];
     this.save(db);
     return db.sessions[patientId];
   }

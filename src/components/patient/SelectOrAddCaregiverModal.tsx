@@ -36,28 +36,36 @@ export const SelectOrAddCaregiverModal: React.FC<SelectOrAddCaregiverModalProps>
   if (!isOpen) return null;
 
   // Handle linking via Caregiver's unique Key
-  const handleLinkByKey = (e: React.FormEvent) => {
+  const handleLinkByKey = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setSuccess(null);
+    setIsLoading(true);
 
     const cleanKey = caregiverKeyInput.trim().toUpperCase();
     if (!cleanKey) {
       setError('Please enter your caregiver’s unique key (e.g., CG-CARE88).');
+      setIsLoading(false);
       return;
     }
 
-    const result = OfflineStore.linkPatientToCaregiverByKey(patient.id, cleanKey);
-    if (!result.success || !result.patient) {
-      setError(result.error || 'Caregiver key not found. Please verify with your caregiver.');
-      return;
-    }
+    try {
+      const result = await OfflineStore.linkPatientToCaregiverByKeyAsync(patient.id, cleanKey);
+      setIsLoading(false);
+      if (!result.success || !result.patient) {
+        setError(result.error || 'Caregiver key not found. Please verify with your caregiver.');
+        return;
+      }
 
-    setSuccess(`Successfully linked with ${result.caretaker?.fullName || 'caregiver'}!`);
-    onCaregiverLinked(result.patient);
-    setTimeout(() => {
-      onClose();
-    }, 1200);
+      setSuccess(`Successfully linked with ${result.caretaker?.fullName || 'caregiver'}!`);
+      onCaregiverLinked(result.patient);
+      setTimeout(() => {
+        onClose();
+      }, 1200);
+    } catch (err: any) {
+      setIsLoading(false);
+      setError(err?.message || 'Failed to link caregiver. Please try again.');
+    }
   };
 
   // Handle manual caregiver creation & linking
@@ -70,8 +78,10 @@ export const SelectOrAddCaregiverModal: React.FC<SelectOrAddCaregiverModalProps>
       setError('Please enter the caregiver full name.');
       return;
     }
-    if (!phone.trim() || phone.trim().length < 8) {
-      setError('Please enter a valid phone number.');
+    const phoneDigits = phone.trim().replace(/\D/g, '');
+    const normalizedPhone = phoneDigits.startsWith('91') && phoneDigits.length === 12 ? phoneDigits.slice(2) : phoneDigits;
+    if (!normalizedPhone || normalizedPhone.length !== 10) {
+      setError('Caregiver phone number must have actually 10 digits.');
       return;
     }
     if (!password.trim() || password.trim().length < 4) {
@@ -89,7 +99,7 @@ export const SelectOrAddCaregiverModal: React.FC<SelectOrAddCaregiverModalProps>
       username: fullName.trim().toLowerCase().replace(/\s+/g, ''),
       password: password.trim(),
       relation: resolvedRelation,
-      phone: phone.trim(),
+      phone: normalizedPhone,
       email: email.trim(),
       pin: password.trim(),
       caregiverKey: generatedKey,

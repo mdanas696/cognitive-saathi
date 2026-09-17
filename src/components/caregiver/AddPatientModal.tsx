@@ -20,29 +20,48 @@ export const AddPatientModal: React.FC<AddPatientModalProps> = ({
 }) => {
   const [fullName, setFullName] = useState('');
   const [preferredName, setPreferredName] = useState('');
-  const [age, setAge] = useState<number>(72);
+  const [age, setAge] = useState<number | ''>('');
   const [state, setState] = useState<PatientProfile['state']>('Assam');
-  const [city, setCity] = useState('Guwahati');
+  const [city, setCity] = useState('');
   const [preferredLanguage, setPreferredLanguage] = useState<LanguageCode>('as');
-  const [phone, setPhone] = useState('+91 ');
-  const [caregiverName, setCaregiverName] = useState(currentCaretaker?.fullName || 'Family Caregiver');
-  const [caregiverPhone, setCaregiverPhone] = useState(currentCaretaker?.phone || '+91 94350 12345');
+  const [phone, setPhone] = useState('');
+  const [caregiverName, setCaregiverName] = useState(currentCaretaker?.fullName || '');
+  const [caregiverPhone, setCaregiverPhone] = useState(currentCaretaker?.phone || '');
   const [selectedAvatar, setSelectedAvatar] = useState<string | undefined>(undefined);
   const [patientKey, setPatientKey] = useState(`PT-${Math.floor(100000 + Math.random() * 900000)}`);
-  const [notes, setNotes] = useState('Mild memory forgetfulness. Prefers morning routines with warm tea.');
+  const [notes, setNotes] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
+
     if (!fullName.trim()) {
       setError('Please enter the patient’s full name.');
       return;
     }
-    if (age < 40 || age > 115) {
+    const numAge = Number(age);
+    if (!age || isNaN(numAge) || numAge < 40 || numAge > 115) {
       setError('Please enter a valid age (40 to 115).');
       return;
+    }
+
+    const pDigits = phone.trim().replace(/\D/g, '');
+    const normPhone = pDigits.startsWith('91') && pDigits.length === 12 ? pDigits.slice(2) : pDigits;
+    if (!normPhone || normPhone.length !== 10) {
+      setError('Patient mobile number must have actually 10 digits.');
+      return;
+    }
+
+    if (caregiverPhone.trim()) {
+      const cgDigits = caregiverPhone.trim().replace(/\D/g, '');
+      const normCg = cgDigits.startsWith('91') && cgDigits.length === 12 ? cgDigits.slice(2) : cgDigits;
+      if (normCg.length !== 10) {
+        setError('Caregiver phone number must have actually 10 digits.');
+        return;
+      }
     }
 
     const newId = `patient-${Date.now()}`;
@@ -53,16 +72,16 @@ export const AddPatientModal: React.FC<AddPatientModalProps> = ({
       fullName: fullName.trim(),
       preferredName: preferredName.trim() || fullName.trim().split(' ')[0],
       patientKey: cleanKey,
-      age: Number(age),
+      age: numAge,
       region: `${city.trim() || state}, ${state}`,
       state,
       preferredLanguage,
-      phone: phone.trim(),
+      phone: normPhone,
       caregiverName: caregiverName.trim(),
       caregiverPhone: caregiverPhone.trim(),
       linkedCaregiverKey: currentCaretaker?.caregiverKey || '',
       avatarUrl: selectedAvatar || '',
-      dailyStreak: 1,
+      dailyStreak: 0,
       todayCompletedCount: 0,
       hasCaregiver: true,
       notes: notes.trim(),
@@ -116,7 +135,7 @@ export const AddPatientModal: React.FC<AddPatientModalProps> = ({
           </div>
         )}
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} autoComplete="off" className="space-y-4">
           {/* Avatar Profile Uploader */}
           <PhotoUploader
             currentPhoto={selectedAvatar}
@@ -136,6 +155,7 @@ export const AddPatientModal: React.FC<AddPatientModalProps> = ({
                 id="patient-full-name"
                 type="text"
                 required
+                autoComplete="off"
                 placeholder="e.g. Biren Hazarika"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
@@ -150,12 +170,31 @@ export const AddPatientModal: React.FC<AddPatientModalProps> = ({
               <input
                 id="patient-pref-name"
                 type="text"
+                autoComplete="off"
                 placeholder="e.g. Deuta, Koka, Dadu"
                 value={preferredName}
                 onChange={(e) => setPreferredName(e.target.value)}
                 className="w-full p-3 rounded-2xl border border-stone-300 text-sm font-medium text-stone-900 focus:outline-teal-800 bg-stone-50/50"
               />
             </div>
+          </div>
+
+          {/* Patient Mobile Number (10 Digits) */}
+          <div className="space-y-1">
+            <label htmlFor="patient-phone" className="text-xs font-bold text-stone-700 block">
+              Patient Mobile Number (10 Digits) *
+            </label>
+            <input
+              id="patient-phone"
+              type="tel"
+              maxLength={10}
+              required
+              autoComplete="off"
+              placeholder="e.g. 9876543210"
+              value={phone}
+              onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
+              className="w-full p-3 rounded-2xl border border-stone-300 text-sm font-medium text-stone-900 focus:outline-teal-800 bg-stone-50/50"
+            />
           </div>
 
           {/* Age & State */}
@@ -170,8 +209,10 @@ export const AddPatientModal: React.FC<AddPatientModalProps> = ({
                 min={40}
                 max={115}
                 required
+                autoComplete="off"
+                placeholder="e.g. 72"
                 value={age}
-                onChange={(e) => setAge(Number(e.target.value))}
+                onChange={(e) => setAge(e.target.value === '' ? '' : Number(e.target.value))}
                 className="w-full p-3 rounded-2xl border border-stone-300 text-sm font-medium text-stone-900 focus:outline-teal-800 bg-stone-50/50"
               />
             </div>

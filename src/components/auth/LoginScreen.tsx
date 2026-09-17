@@ -82,7 +82,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
   const [regFullName, setRegFullName] = useState('');
   const [regPreferredName, setRegPreferredName] = useState('');
   const [regUsername, setRegUsername] = useState('');
-  const [regAge, setRegAge] = useState('70');
+  const [regAge, setRegAge] = useState('');
   const [regPhone, setRegPhone] = useState('');
   const [regState, setRegState] = useState('Assam');
   const [regPreferredLang, setRegPreferredLang] = useState<LanguageCode>(lang);
@@ -126,6 +126,17 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     if (!inputTrimmed) {
       setErrorMsg('Please enter your mobile number or username.');
       return;
+    }
+
+    // Check if input is a mobile number attempt (contains digits or is a phone number format)
+    const digitsOnly = inputTrimmed.replace(/\D/g, '');
+    const isPhoneAttempt = /^[0-9+\s()-]+$/.test(inputTrimmed) && digitsOnly.length > 0;
+    if (isPhoneAttempt) {
+      const normalizedDigits = digitsOnly.startsWith('91') && digitsOnly.length === 12 ? digitsOnly.slice(2) : digitsOnly;
+      if (normalizedDigits.length !== 10) {
+        setErrorMsg('Mobile number must have actually 10 digits.');
+        return;
+      }
     }
 
     if (!patientPassword.trim()) {
@@ -264,8 +275,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     }
 
     const phoneTrim = regPhone.trim().replace(/\D/g, '');
-    if (!phoneTrim || phoneTrim.length < 10) {
-      setErrorMsg('Mobile Number is mandatory. Please enter a valid 10-digit mobile number.');
+    const normalizedPhone = phoneTrim.startsWith('91') && phoneTrim.length === 12 ? phoneTrim.slice(2) : phoneTrim;
+    if (!normalizedPhone || normalizedPhone.length !== 10) {
+      setErrorMsg('Mobile number must have actually 10 digits. Please enter a valid 10-digit number.');
       return;
     }
 
@@ -345,9 +357,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
       }
 
       // FLOW REQUIREMENT: Register -> Login -> App
-      // Switch immediately to LOGIN mode with phone pre-filled
+      // Do not auto-fill details
       setAuthMode('LOGIN');
-      setPatientLoginInput(phoneTrim);
+      setPatientLoginInput('');
       setPatientPassword('');
       setRegPassword('');
       setRegConfirmPassword('');
@@ -371,6 +383,17 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     if (!inputTrimmed) {
       setErrorMsg('Please enter your mobile number or username.');
       return;
+    }
+
+    // Check if input is a mobile number attempt (contains digits or is a phone number format)
+    const digitsOnly = inputTrimmed.replace(/\D/g, '');
+    const isPhoneAttempt = /^[0-9+\s()-]+$/.test(inputTrimmed) && digitsOnly.length > 0;
+    if (isPhoneAttempt) {
+      const normalizedDigits = digitsOnly.startsWith('91') && digitsOnly.length === 12 ? digitsOnly.slice(2) : digitsOnly;
+      if (normalizedDigits.length !== 10) {
+        setErrorMsg('Mobile number must have actually 10 digits.');
+        return;
+      }
     }
 
     if (!caregiverPin.trim()) {
@@ -483,8 +506,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     }
 
     const phoneTrim = regCaregiverPhone.trim().replace(/\D/g, '');
-    if (!phoneTrim || phoneTrim.length < 10) {
-      setErrorMsg('Mobile Number is mandatory. Please enter a valid 10-digit mobile number.');
+    const normalizedPhone = phoneTrim.startsWith('91') && phoneTrim.length === 12 ? phoneTrim.slice(2) : phoneTrim;
+    if (!normalizedPhone || normalizedPhone.length !== 10) {
+      setErrorMsg('Mobile number must have actually 10 digits. Please enter a valid 10-digit number.');
       return;
     }
 
@@ -550,8 +574,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
       }
 
       // FLOW REQUIREMENT: Register -> Login -> App
+      // Do not auto-fill details
       setAuthMode('LOGIN');
-      setCaregiverLoginInput(phoneTrim);
+      setCaregiverLoginInput('');
       setCaregiverPin('');
       setRegCaregiverPin('');
       setRegCaregiverConfirmPin('');
@@ -759,7 +784,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
             <>
               {authMode === 'LOGIN' ? (
                 /* Patient Login Form (Mobile Number & Password) */
-                <form onSubmit={handlePatientLogin} className="space-y-4">
+                <form onSubmit={handlePatientLogin} className="space-y-4" autoComplete="off">
                   <div className="space-y-3.5">
                     <div className="space-y-1">
                       <label htmlFor="patient-login-input" className="text-xs font-bold text-stone-700 dark:text-stone-300 block">
@@ -769,7 +794,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                         <Phone className="w-4 h-4 text-stone-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                         <input
                           id="patient-login-input"
+                          name="login_patient_phone_no_autofill"
                           type="text"
+                          autoComplete="off"
+                          data-lpignore="true"
+                          data-form-type="other"
                           required
                           value={patientLoginInput}
                           onChange={(e) => {
@@ -800,7 +829,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                         <Lock className="w-4 h-4 text-stone-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                         <input
                           id="patient-password-input"
+                          name="login_patient_pwd_no_autofill"
                           type={showPatientPassword ? 'text' : 'password'}
+                          autoComplete="new-password"
+                          data-lpignore="true"
+                          data-form-type="other"
                           required
                           value={patientPassword}
                           onChange={(e) => {
@@ -859,7 +892,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                 </form>
               ) : (
                 /* Patient Register Form (MANDATORY FIELDS, REGISTER -> LOGIN -> APP) */
-                <form onSubmit={handlePatientRegister} className="space-y-4">
+                <form onSubmit={handlePatientRegister} className="space-y-4" autoComplete="off">
                   <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl text-xs text-amber-900 dark:text-amber-200 flex items-center gap-2">
                     <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
                     <span>All fields marked with <strong className="text-rose-600">*</strong> are mandatory. After registration, please log in with your number & password.</span>
@@ -1104,7 +1137,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
             <>
               {authMode === 'LOGIN' ? (
                 /* Caregiver Login Form (Mobile Number & Password) */
-                <form onSubmit={handleCaregiverLogin} className="space-y-4">
+                <form onSubmit={handleCaregiverLogin} className="space-y-4" autoComplete="off">
                   <div className="space-y-3.5">
                     <div className="space-y-1">
                       <label htmlFor="caregiver-login-input" className="text-xs font-bold text-stone-700 dark:text-stone-300 block">
@@ -1114,7 +1147,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                         <Phone className="w-4 h-4 text-stone-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                         <input
                           id="caregiver-login-input"
+                          name="login_caregiver_phone_no_autofill"
                           type="text"
+                          autoComplete="off"
+                          data-lpignore="true"
+                          data-form-type="other"
                           required
                           value={caregiverLoginInput}
                           onChange={(e) => {
@@ -1135,7 +1172,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                         <Lock className="w-4 h-4 text-stone-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                         <input
                           id="caregiver-pin-input"
+                          name="login_caregiver_pwd_no_autofill"
                           type={showCaregiverPin ? 'text' : 'password'}
+                          autoComplete="new-password"
+                          data-lpignore="true"
+                          data-form-type="other"
                           required
                           value={caregiverPin}
                           onChange={(e) => {
@@ -1193,7 +1234,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                 </form>
               ) : (
                 /* Caregiver Register Form (MANDATORY FIELDS, REGISTER -> LOGIN -> APP) */
-                <form onSubmit={handleCaregiverRegister} className="space-y-4">
+                <form onSubmit={handleCaregiverRegister} className="space-y-4" autoComplete="off">
                   <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl text-xs text-amber-900 dark:text-amber-200 flex items-center gap-2">
                     <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
                     <span>All fields marked with <strong className="text-rose-600">*</strong> are mandatory. After registration, please log in with your number & password.</span>

@@ -18,29 +18,38 @@ export const LinkPatientKeyModal: React.FC<LinkPatientKeyModalProps> = ({
 }) => {
   const [patientIdentifier, setPatientIdentifier] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
   if (!isOpen) return null;
 
-  const handleLink = (e: React.FormEvent) => {
+  const handleLink = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setIsLoading(true);
 
     const trimmed = patientIdentifier.trim();
     if (!trimmed) {
       setError('Please enter the Patient Key, Mobile Number, or Username.');
+      setIsLoading(false);
       return;
     }
 
     const currentCaretakerId = caretakerId || OfflineStore.getActiveCaretakerId() || 'caretaker-1';
-    const result = OfflineStore.linkCaregiverToPatientByKey(currentCaretakerId, trimmed);
+    try {
+      const result = await OfflineStore.linkCaregiverToPatientByKeyAsync(currentCaretakerId, trimmed);
+      setIsLoading(false);
 
-    if (!result.success || !result.patient) {
-      setError(result.error || 'No patient found with that key, mobile number, or username.');
-      return;
+      if (!result.success || !result.patient) {
+        setError(result.error || 'No patient found with that key, mobile number, or username.');
+        return;
+      }
+
+      onPatientLinked(result.patient);
+      onClose();
+    } catch (err: any) {
+      setIsLoading(false);
+      setError(err?.message || 'Failed to link patient. Please try again.');
     }
-
-    onPatientLinked(result.patient);
-    onClose();
   };
 
   return (
@@ -88,7 +97,7 @@ export const LinkPatientKeyModal: React.FC<LinkPatientKeyModalProps> = ({
           </div>
         )}
 
-        <form onSubmit={handleLink} className="space-y-4">
+        <form onSubmit={handleLink} autoComplete="off" className="space-y-4">
           <div className="space-y-1.5">
             <label htmlFor="patient-key-input" className="text-xs font-bold text-stone-700 dark:text-stone-300 block">
               Patient Key, Mobile Number, or Username:
@@ -97,6 +106,10 @@ export const LinkPatientKeyModal: React.FC<LinkPatientKeyModalProps> = ({
               id="patient-key-input"
               type="text"
               required
+              autoComplete="off"
+              autoCorrect="off"
+              autoCapitalize="characters"
+              spellCheck="false"
               value={patientIdentifier}
               onChange={(e) => setPatientIdentifier(e.target.value)}
               placeholder="e.g. PT-RAME68 or 9876543210"
@@ -107,16 +120,18 @@ export const LinkPatientKeyModal: React.FC<LinkPatientKeyModalProps> = ({
           <div className="flex items-center gap-2 pt-2">
             <button
               type="button"
+              disabled={isLoading}
               onClick={onClose}
-              className="flex-1 py-3 px-4 rounded-2xl border border-stone-200 dark:border-stone-700 text-stone-700 dark:text-stone-300 font-bold text-xs hover:bg-stone-100 dark:hover:bg-stone-800 transition"
+              className="flex-1 py-3 px-4 rounded-2xl border border-stone-200 dark:border-stone-700 text-stone-700 dark:text-stone-300 font-bold text-xs hover:bg-stone-100 dark:hover:bg-stone-800 transition disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="flex-2 py-3 px-4 rounded-2xl bg-teal-800 hover:bg-teal-900 text-white font-bold text-xs transition flex items-center justify-center gap-2 shadow-xs"
+              disabled={isLoading}
+              className="flex-2 py-3 px-4 rounded-2xl bg-teal-800 hover:bg-teal-900 text-white font-bold text-xs transition flex items-center justify-center gap-2 shadow-xs disabled:opacity-50 cursor-pointer"
             >
-              <span>Link Patient Now</span>
+              <span>{isLoading ? 'Connecting...' : 'Link Patient Now'}</span>
               <ArrowRight className="w-4 h-4 text-amber-300" />
             </button>
           </div>

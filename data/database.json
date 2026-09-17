@@ -60,7 +60,10 @@
       "avatarUrl": "",
       "dailyStreak": 0,
       "todayCompletedCount": 0,
-      "linkedCaregiverKey": ""
+      "linkedCaregiverKey": "CG-HATXFT",
+      "hasCaregiver": true,
+      "caregiverName": "Ali (Daughter)",
+      "caregiverPhone": "9704874836"
     }
   ],
   "caretakers": [
@@ -89,7 +92,9 @@
       "relation": "Daughter",
       "pin": "1234",
       "caregiverKey": "CG-HATXFT",
-      "assignedPatientIds": [],
+      "assignedPatientIds": [
+        "patient-1789631632856"
+      ],
       "avatarUrl": ""
     }
   ],

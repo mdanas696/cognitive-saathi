@@ -694,16 +694,39 @@ export class OfflineStore {
     }
   }
 
-  // Patient links themselves using Caregiver's unique Key
-  static linkPatientToCaregiverByKey(
+  // Patient links themselves using Caregiver's unique Key (Async with server sync)
+  static async linkPatientToCaregiverByKeyAsync(
     patientId: string,
     caregiverKey: string
-  ): { success: boolean; error?: string; caretaker?: CaretakerProfile; patient?: PatientProfile } {
+  ): Promise<{ success: boolean; error?: string; caretaker?: CaretakerProfile; patient?: PatientProfile }> {
     const cleanKey = caregiverKey.trim().toUpperCase();
     if (!cleanKey) {
       return { success: false, error: 'Please enter a valid Caregiver Key (e.g., CG-CARE88).' };
     }
 
+    try {
+      const res = await fetch(`/api/patients/${patientId}/link-caregiver`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ caregiverKey: cleanKey }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.patient && data.caretaker) {
+          this.addCaretaker(data.caretaker);
+          this.addPatient(data.patient);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('cognitivesaathi_sync'));
+          }
+          return { success: true, caretaker: data.caretaker, patient: data.patient };
+        }
+      }
+    } catch (e) {
+      console.warn('Network link request failed, falling back to local database:', e);
+    }
+
+    // Local fallback
     const allCaretakers = this.getCaretakers();
     const targetCaretaker = allCaretakers.find(
       (c) => (c.caregiverKey || '').toUpperCase() === cleanKey
@@ -722,32 +745,125 @@ export class OfflineStore {
       return { success: false, error: 'Patient account not found.' };
     }
 
-    // Link patient to caretaker's assigned list
     if (!targetCaretaker.assignedPatientIds.includes(targetPatient.id)) {
       targetCaretaker.assignedPatientIds.push(targetPatient.id);
       this.saveCaretakers(allCaretakers);
     }
 
-    // Update patient's caregiver details
     targetPatient.hasCaregiver = true;
     targetPatient.caregiverName = `${targetCaretaker.fullName} (${targetCaretaker.relation || 'Caregiver'})`;
     targetPatient.caregiverPhone = targetCaretaker.phone;
     targetPatient.linkedCaregiverKey = targetCaretaker.caregiverKey;
     this.savePatient(targetPatient);
 
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('cognitivesaathi_sync'));
+    }
+
     return { success: true, caretaker: targetCaretaker, patient: targetPatient };
   }
 
-  // Caregiver links an existing patient by Patient Key (PT-XXXX), Mobile Phone, Username, or ID
-  static linkCaregiverToPatientByKey(
+  // Synchronous wrapper for patient link (also triggers async server sync)
+  static linkPatientToCaregiverByKey(
+    patientId: string,
+    caregiverKey: string
+  ): { success: boolean; error?: string; caretaker?: CaretakerProfile; patient?: PatientProfile } {
+    const cleanKey = caregiverKey.trim().toUpperCase();
+    if (!cleanKey) {
+      return { success: false, error: 'Please enter a valid Caregiver Key (e.g., CG-CARE88).' };
+    }
+
+    // Optimistic local update
+    const allCaretakers = this.getCaretakers();
+    const targetCaretaker = allCaretakers.find(
+      (c) => (c.caregiverKey || '').toUpperCase() === cleanKey
+    );
+
+    const allPatients = this.getPatients();
+    const targetPatient = allPatients.find((p) => p.id === patientId);
+
+    if (targetCaretaker && targetPatient) {
+      if (!targetCaretaker.assignedPatientIds.includes(targetPatient.id)) {
+        targetCaretaker.assignedPatientIds.push(targetPatient.id);
+        this.saveCaretakers(allCaretakers);
+      }
+      targetPatient.hasCaregiver = true;
+      targetPatient.caregiverName = `${targetCaretaker.fullName} (${targetCaretaker.relation || 'Caregiver'})`;
+      targetPatient.caregiverPhone = targetCaretaker.phone;
+      targetPatient.linkedCaregiverKey = targetCaretaker.caregiverKey;
+      this.savePatient(targetPatient);
+    }
+
+    // Trigger server link
+    fetch(`/api/patients/${patientId}/link-caregiver`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ caregiverKey: cleanKey }),
+    })
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.success) {
+          if (data.caretaker) OfflineStore.addCaretaker(data.caretaker);
+          if (data.patient) OfflineStore.addPatient(data.patient);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('cognitivesaathi_sync'));
+          }
+        }
+      })
+      .catch((err) => console.warn('Background link sync error:', err));
+
+    if (targetCaretaker && targetPatient) {
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('cognitivesaathi_sync'));
+      }
+      return { success: true, caretaker: targetCaretaker, patient: targetPatient };
+    }
+
+    return {
+      success: true,
+      patient: targetPatient ? { ...targetPatient, linkedCaregiverKey: cleanKey, hasCaregiver: true } : undefined,
+    };
+  }
+
+  // Caregiver links an existing patient by Patient Key (PT-XXXX), Mobile Phone, Username, or ID (Async)
+  static async linkCaregiverToPatientByKeyAsync(
     caretakerId: string,
     keyOrIdentifier: string
-  ): { success: boolean; error?: string; patient?: PatientProfile } {
+  ): Promise<{ success: boolean; error?: string; patient?: PatientProfile; caretaker?: CaretakerProfile }> {
+    const raw = keyOrIdentifier.trim();
+    if (!raw) {
+      return { success: false, error: 'Please enter a Patient Key, Mobile Number, or Username.' };
+    }
+
+    try {
+      const res = await fetch(`/api/caretakers/${caretakerId}/link-patient`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ identifier: raw }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.patient && data.caretaker) {
+          this.addCaretaker(data.caretaker);
+          this.addPatient(data.patient);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('cognitivesaathi_sync'));
+          }
+          return { success: true, patient: data.patient, caretaker: data.caretaker };
+        } else if (data.error) {
+          return { success: false, error: data.error };
+        }
+      }
+    } catch (e) {
+      console.warn('Network link request failed, falling back to local database:', e);
+    }
+
+    // Local fallback lookup
     const allCaretakers = this.getCaretakers();
     const caretaker = allCaretakers.find((c) => c.id === caretakerId);
     if (!caretaker) return { success: false, error: 'Caregiver account not found.' };
 
-    const raw = keyOrIdentifier.trim();
     const cleanUpper = raw.toUpperCase();
     const cleanDigits = raw.replace(/\D/g, '');
     const cleanLower = raw.toLowerCase();
@@ -766,30 +882,91 @@ export class OfflineStore {
     });
 
     if (patient) {
-      const res = this.linkPatientToCaregiverByKey(patient.id, caretaker.caregiverKey);
-      // Fire-and-forget sync to server DB
-      fetch(`/api/caretakers/${caretaker.id}/link-patient`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ identifier: patient.patientKey || patient.id }),
-      }).catch((e) => console.warn('Server link sync error:', e));
+      if (!caretaker.assignedPatientIds.includes(patient.id)) {
+        caretaker.assignedPatientIds.push(patient.id);
+        this.saveCaretakers(allCaretakers);
+      }
+      patient.hasCaregiver = true;
+      patient.caregiverName = `${caretaker.fullName} (${caretaker.relation || 'Caregiver'})`;
+      patient.caregiverPhone = caretaker.phone;
+      patient.linkedCaregiverKey = caretaker.caregiverKey;
+      this.savePatient(patient);
 
-      return { success: res.success, error: res.error, patient: res.patient };
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('cognitivesaathi_sync'));
+      }
+
+      return { success: true, patient, caretaker };
     }
 
-    // Try server lookup if not in local store
+    return {
+      success: false,
+      error: 'No patient found with that Patient Key (PT-XXXX), mobile number, or username.',
+    };
+  }
+
+  // Synchronous wrapper for caregiver link
+  static linkCaregiverToPatientByKey(
+    caretakerId: string,
+    keyOrIdentifier: string
+  ): { success: boolean; error?: string; patient?: PatientProfile } {
+    const raw = keyOrIdentifier.trim();
+    const allCaretakers = this.getCaretakers();
+    const caretaker = allCaretakers.find((c) => c.id === caretakerId);
+    if (!caretaker) return { success: false, error: 'Caregiver account not found.' };
+
+    const cleanUpper = raw.toUpperCase();
+    const cleanDigits = raw.replace(/\D/g, '');
+    const cleanLower = raw.toLowerCase();
+
+    const allPatients = this.getPatients();
+    const patient = allPatients.find((p) => {
+      if (p.patientKey && p.patientKey.toUpperCase() === cleanUpper) return true;
+      if (p.id === raw || p.id.toUpperCase() === cleanUpper) return true;
+      if (p.username && p.username.toLowerCase() === cleanLower) return true;
+      if (p.fullName && p.fullName.toLowerCase() === cleanLower) return true;
+      if (cleanDigits && p.phone) {
+        const pDigits = p.phone.replace(/\D/g, '');
+        if (pDigits === cleanDigits || pDigits.endsWith(cleanDigits) || cleanDigits.endsWith(pDigits)) return true;
+      }
+      return false;
+    });
+
+    // Fire server request
     fetch(`/api/caretakers/${caretaker.id}/link-patient`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ identifier: raw }),
     })
-      .then((res) => res.json())
+      .then((r) => r.json())
       .then((data) => {
-        if (data.patient) {
-          OfflineStore.addPatient(data.patient);
+        if (data.success) {
+          if (data.caretaker) OfflineStore.addCaretaker(data.caretaker);
+          if (data.patient) OfflineStore.addPatient(data.patient);
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new CustomEvent('cognitivesaathi_sync'));
+          }
         }
       })
-      .catch(() => {});
+      .catch((e) => console.warn('Server link sync error:', e));
+
+    if (patient) {
+      if (!caretaker.assignedPatientIds.includes(patient.id)) {
+        caretaker.assignedPatientIds.push(patient.id);
+        this.saveCaretakers(allCaretakers);
+      }
+      patient.hasCaregiver = true;
+      patient.caregiverName = `${caretaker.fullName} (${caretaker.relation || 'Caregiver'})`;
+      patient.caregiverPhone = caretaker.phone;
+      patient.linkedCaregiverKey = caretaker.caregiverKey;
+      this.savePatient(patient);
+
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('cognitivesaathi_sync'));
+      }
+
+      return { success: true, patient };
+    }
 
     return {
       success: false,
@@ -812,6 +989,14 @@ export class OfflineStore {
     patient.caregiverPhone = '';
     patient.linkedCaregiverKey = undefined;
     this.savePatient(patient);
+
+    fetch(`/api/patients/${patientId}/unlink-caregiver`, {
+      method: 'POST',
+    }).catch((e) => console.warn('Unlink server error:', e));
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('cognitivesaathi_sync'));
+    }
   }
 
   // Update Caregiver Key (customized by Caregiver)

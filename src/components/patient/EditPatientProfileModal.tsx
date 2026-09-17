@@ -26,13 +26,37 @@ export const EditPatientProfileModal: React.FC<EditPatientProfileModalProps> = (
   const [preferredLanguage, setPreferredLanguage] = useState<LanguageCode>(patient.preferredLanguage || 'as');
   const [phone, setPhone] = useState(patient.phone || '');
   const [isSelfCare, setIsSelfCare] = useState<boolean>(!patient.caregiverName || patient.hasCaregiver === false);
-  const [emergencyPhone, setEmergencyPhone] = useState(patient.caregiverPhone || '+91 94350 12345');
+  const [emergencyPhone, setEmergencyPhone] = useState(patient.caregiverPhone || '');
   const [notes, setNotes] = useState(patient.notes || '');
+  const [error, setError] = useState<string | null>(null);
 
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
+
+    let cleanPhone = patient.phone || '';
+    if (phone.trim()) {
+      const pDigits = phone.trim().replace(/\D/g, '');
+      const norm = pDigits.startsWith('91') && pDigits.length === 12 ? pDigits.slice(2) : pDigits;
+      if (norm.length !== 10) {
+        setError('Phone number must have actually 10 digits.');
+        return;
+      }
+      cleanPhone = norm;
+    }
+
+    let cleanEmergencyPhone = patient.caregiverPhone || '';
+    if (emergencyPhone.trim()) {
+      const eDigits = emergencyPhone.trim().replace(/\D/g, '');
+      const normE = eDigits.startsWith('91') && eDigits.length === 12 ? eDigits.slice(2) : eDigits;
+      if (normE.length !== 10) {
+        setError('Caregiver phone number must have actually 10 digits.');
+        return;
+      }
+      cleanEmergencyPhone = normE;
+    }
 
     const updated: PatientProfile = {
       ...patient,
@@ -43,10 +67,10 @@ export const EditPatientProfileModal: React.FC<EditPatientProfileModalProps> = (
       state,
       region: region.trim() || `${state}`,
       preferredLanguage,
-      phone: phone.trim(),
+      phone: cleanPhone,
       hasCaregiver: !isSelfCare,
       caregiverName: isSelfCare ? '' : (patient.caregiverName || 'Family Caregiver'),
-      caregiverPhone: isSelfCare ? emergencyPhone.trim() : (patient.caregiverPhone || emergencyPhone.trim()),
+      caregiverPhone: cleanEmergencyPhone,
       notes: notes.trim(),
     };
 
@@ -92,7 +116,13 @@ export const EditPatientProfileModal: React.FC<EditPatientProfileModalProps> = (
           If you live independently or manage your own health without a daily caregiver, you can easily personalize your name, location, preferred language, and emergency contact here.
         </p>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
+        {error && (
+          <div className="p-3 bg-rose-50 border border-rose-200 rounded-2xl text-xs font-semibold text-rose-700">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} autoComplete="off" className="space-y-4">
           {/* Profile Photo Upload */}
           <PhotoUploader
             currentPhoto={avatarUrl}

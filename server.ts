@@ -2,6 +2,8 @@ import express from 'express';
 import path from 'path';
 import { createServer as createViteServer } from 'vite';
 import { GoogleGenAI } from '@google/genai';
+import { ServerDB } from './server/db';
+import { PatientProfile, CaretakerProfile } from './src/types';
 
 const app = express();
 const PORT = 3000;
@@ -28,6 +30,245 @@ function getAiClient(): GoogleGenAI | null {
   }
   return aiClient;
 }
+
+// -------------------------------------------------------------
+// Authentication & Account Database APIs
+// -------------------------------------------------------------
+
+// Check username availability
+app.get('/api/auth/check-username', (req, res) => {
+  const username = String(req.query.username || '').trim();
+  if (!username) {
+    res.status(400).json({ error: 'Username query parameter is required' });
+    return;
+  }
+  const taken = ServerDB.isUsernameTaken(username);
+  res.json({ available: !taken });
+});
+
+// Register new account (Patient or Caregiver)
+app.post('/api/auth/register', (req, res) => {
+  try {
+    const { role, profile, password } = req.body;
+
+    if (!role || !profile || !password) {
+      res.status(400).json({ error: 'Role, profile data, and password are required.' });
+      return;
+    }
+
+    const { fullName, username, phone } = profile;
+
+    if (!fullName || !fullName.trim()) {
+      res.status(400).json({ error: 'Full Name is mandatory.' });
+      return;
+    }
+
+    if (!username || !username.trim()) {
+      res.status(400).json({ error: 'Username is mandatory.' });
+      return;
+    }
+
+    const cleanUsername = username.trim().toLowerCase();
+    if (cleanUsername.length < 3) {
+      res.status(400).json({ error: 'Username must be at least 3 characters.' });
+      return;
+    }
+
+    if (ServerDB.isUsernameTaken(cleanUsername)) {
+      res.status(400).json({ error: `Username "${username}" is already taken. Please choose another username.` });
+      return;
+    }
+
+    if (!phone || !phone.trim()) {
+      res.status(400).json({ error: 'Mobile number is mandatory.' });
+      return;
+    }
+
+    const cleanPhone = phone.replace(/\D/g, '');
+    if (cleanPhone.length < 10) {
+      res.status(400).json({ error: 'Please enter a valid 10-digit mobile number.' });
+      return;
+    }
+
+    if (ServerDB.isPhoneTaken(cleanPhone)) {
+      res.status(400).json({ error: 'This mobile number is already registered. Please log in instead.' });
+      return;
+    }
+
+    if (password.length < 4) {
+      res.status(400).json({ error: 'Password must be at least 4 characters long.' });
+      return;
+    }
+
+    if (role === 'PATIENT') {
+      const patientId = `patient-${Date.now()}`;
+      const newPatient: PatientProfile = {
+        id: patientId,
+        fullName: fullName.trim(),
+        preferredName: profile.preferredName?.trim() || fullName.trim().split(' ')[0],
+        username: cleanUsername,
+        password: password,
+        pin: profile.pin || password.slice(0, 4),
+        age: Number(profile.age) || 70,
+        region: profile.region?.trim() || 'Guwahati, Assam',
+        state: profile.state || 'Assam',
+        preferredLanguage: profile.preferredLanguage || 'en',
+        phone: cleanPhone,
+        hasCaregiver: Boolean(profile.hasCaregiver),
+        caregiverName: profile.caregiverName?.trim() || 'Family Caregiver',
+        caregiverPhone: profile.caregiverPhone?.trim() || '',
+        avatarUrl: profile.avatarUrl || '',
+        dailyStreak: 0,
+        todayCompletedCount: 0,
+        linkedCaregiverKey: profile.linkedCaregiverKey || '',
+      };
+
+      ServerDB.addPatient(newPatient);
+
+      res.status(201).json({
+        success: true,
+        message: 'Account registered successfully! Please log in with your mobile number and password.',
+        patient: newPatient,
+      });
+      return;
+    } else if (role === 'CAREGIVER') {
+      const caretakerId = `caretaker-${Date.now()}`;
+      const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+      let code = '';
+      for (let i = 0; i < 6; i++) {
+        code += chars.charAt(Math.floor(Math.random() * chars.length));
+      }
+      const caregiverKey = `CG-${code}`;
+
+      const newCaretaker: CaretakerProfile = {
+        id: caretakerId,
+        fullName: fullName.trim(),
+        username: cleanUsername,
+        password: password,
+        phone: cleanPhone,
+        email: profile.email?.trim() || '',
+        relation: profile.relation?.trim() || 'Family Member',
+        pin: profile.pin || password.slice(0, 4),
+        caregiverKey: caregiverKey,
+        assignedPatientIds: profile.assignedPatientIds || [],
+        avatarUrl: profile.avatarUrl || '',
+      };
+
+      ServerDB.addCaretaker(newCaretaker);
+
+      res.status(201).json({
+        success: true,
+        message: 'Caregiver account registered successfully! Please log in with your mobile number and password.',
+        caretaker: newCaretaker,
+      });
+      return;
+    }
+
+    res.status(400).json({ error: 'Invalid role specified.' });
+  } catch (err: any) {
+    console.error('Registration error:', err);
+    res.status(500).json({ error: 'Registration failed', details: err?.message });
+  }
+});
+
+// Login API (Number/Username and Password)
+app.post('/api/auth/login', (req, res) => {
+  try {
+    const { identifier, password, role = 'PATIENT' } = req.body;
+
+    if (!identifier || !password) {
+      res.status(400).json({ error: 'Please enter your mobile number/username and password.' });
+      return;
+    }
+
+    const cleanInput = String(identifier).trim();
+
+    if (role === 'PATIENT') {
+      const patient = ServerDB.findPatient(cleanInput);
+      if (!patient) {
+        res.status(401).json({
+          error: 'No account found with that mobile number or username. Please check your credentials or register.',
+        });
+        return;
+      }
+
+      // Check password or pin
+      if (patient.password && patient.password !== password && patient.pin !== password) {
+        res.status(401).json({ error: 'Incorrect password. Please try again.' });
+        return;
+      }
+
+      res.json({
+        success: true,
+        role: 'PATIENT',
+        patient,
+        token: `token-${patient.id}-${Date.now()}`,
+      });
+      return;
+    } else {
+      const caretaker = ServerDB.findCaretaker(cleanInput);
+      if (!caretaker) {
+        res.status(401).json({
+          error: 'No caregiver account found with that mobile number or username. Please check your credentials or register.',
+        });
+        return;
+      }
+
+      if (caretaker.password && caretaker.password !== password && caretaker.pin !== password) {
+        res.status(401).json({ error: 'Incorrect password. Please try again.' });
+        return;
+      }
+
+      // Find assigned patient
+      const allPatients = ServerDB.getPatients();
+      const assigned =
+        allPatients.find((p) => caretaker.assignedPatientIds.includes(p.id)) ||
+        allPatients[0];
+
+      res.json({
+        success: true,
+        role: 'CAREGIVER',
+        caretaker,
+        patient: assigned,
+        token: `token-${caretaker.id}-${Date.now()}`,
+      });
+      return;
+    }
+  } catch (err: any) {
+    console.error('Login error:', err);
+    res.status(500).json({ error: 'Login failed', details: err?.message });
+  }
+});
+
+// Patients endpoint
+app.get('/api/patients', (req, res) => {
+  res.json(ServerDB.getPatients());
+});
+
+app.post('/api/patients', (req, res) => {
+  const patient = req.body;
+  if (!patient || !patient.id) {
+    res.status(400).json({ error: 'Invalid patient data' });
+    return;
+  }
+  const saved = ServerDB.addPatient(patient);
+  res.json(saved);
+});
+
+// Caretakers endpoint
+app.get('/api/caretakers', (req, res) => {
+  res.json(ServerDB.getCaretakers());
+});
+
+app.post('/api/caretakers', (req, res) => {
+  const caretaker = req.body;
+  if (!caretaker || !caretaker.id) {
+    res.status(400).json({ error: 'Invalid caretaker data' });
+    return;
+  }
+  const saved = ServerDB.addCaretaker(caretaker);
+  res.json(saved);
+});
 
 // -------------------------------------------------------------
 // 1. Health check API

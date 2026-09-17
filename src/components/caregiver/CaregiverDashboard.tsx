@@ -362,7 +362,7 @@ export const CaregiverDashboard: React.FC<CaregiverDashboardProps> = ({
       )}
 
       {/* AI Caregiver Co-Pilot Banner & Interactive Assistant */}
-      <div className="rounded-3xl bg-gradient-to-r from-teal-900 via-teal-850 to-teal-950 text-white p-6 shadow-sm border border-teal-800 space-y-4">
+      <div className="rounded-3xl bg-gradient-to-r from-teal-900 via-teal-800 to-teal-950 text-white p-6 shadow-sm border border-teal-800 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 rounded-2xl bg-amber-400 text-teal-950 flex items-center justify-center font-bold shrink-0 shadow-xs">

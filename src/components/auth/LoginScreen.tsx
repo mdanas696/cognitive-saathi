@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Heart,
   ShieldCheck,
@@ -15,374 +15,536 @@ import {
   KeyRound,
   Compass,
   Check,
+  Volume2,
+  Loader2,
+  MapPin,
+  Globe,
+  Sun,
+  Moon,
 } from 'lucide-react';
 import { LanguageCode, PatientProfile, CaretakerProfile } from '../../types';
 import { translations } from '../../lib/i18n';
 import { OfflineStore } from '../../lib/offlineStore';
 import { VoiceService } from '../../lib/voiceService';
-import { ElderAvatar } from '../common/ElderAvatar';
 import { PhotoUploader } from '../common/PhotoUploader';
 import { LanguageDropdown } from '../common/LanguageDropdown';
 import { ForgotPinModal } from './ForgotPinModal';
+import { VoicePackModal } from '../voice/VoicePackModal';
 
 interface LoginScreenProps {
   onLoginPatient: (patient: PatientProfile) => void;
   onLoginCaregiver: (caretaker: CaretakerProfile, selectedPatient: PatientProfile) => void;
   lang: LanguageCode;
   onLangChange: (lang: LanguageCode) => void;
+  theme?: 'light' | 'dark';
+  onToggleTheme?: () => void;
 }
+
+const NER_STATES = [
+  'Assam',
+  'Manipur',
+  'Meghalaya',
+  'Mizoram',
+  'Nagaland',
+  'Tripura',
+  'Arunachal Pradesh',
+  'Sikkim',
+  'Other',
+];
 
 export const LoginScreen: React.FC<LoginScreenProps> = ({
   onLoginPatient,
   onLoginCaregiver,
   lang,
   onLangChange,
+  theme = 'light',
+  onToggleTheme,
 }) => {
   const t = translations[lang];
 
   // Selected space: 'PATIENT' or 'CAREGIVER'
   const [selectedSpace, setSelectedSpace] = useState<'PATIENT' | 'CAREGIVER'>('PATIENT');
 
-  // Sub-tab: 'LOGIN' or 'REGISTER'
+  // Flow State: 'LOGIN' or 'REGISTER'
   const [authMode, setAuthMode] = useState<'LOGIN' | 'REGISTER'>('LOGIN');
 
-  // Patient Login Form State
+  // Patient Login Form State (Number or Username + Password)
   const [patientLoginInput, setPatientLoginInput] = useState('');
   const [patientPassword, setPatientPassword] = useState('');
   const [showPatientPassword, setShowPatientPassword] = useState(false);
 
-  // Caregiver Login Form State
+  // Caregiver Login Form State (Number or Username + Password)
   const [caregiverLoginInput, setCaregiverLoginInput] = useState('');
   const [caregiverPin, setCaregiverPin] = useState('');
   const [showCaregiverPin, setShowCaregiverPin] = useState(false);
 
-  // Patient Registration Form State
+  // Patient Registration Form State (ALL FIELDS MANDATORY)
   const [regFullName, setRegFullName] = useState('');
   const [regPreferredName, setRegPreferredName] = useState('');
   const [regUsername, setRegUsername] = useState('');
-  const [regAge, setRegAge] = useState('72');
+  const [regAge, setRegAge] = useState('70');
   const [regPhone, setRegPhone] = useState('');
+  const [regState, setRegState] = useState('Assam');
+  const [regPreferredLang, setRegPreferredLang] = useState<LanguageCode>(lang);
   const [regPassword, setRegPassword] = useState('');
+  const [regConfirmPassword, setRegConfirmPassword] = useState('');
   const [showRegPassword, setShowRegPassword] = useState(false);
   const [regAvatar, setRegAvatar] = useState<string | undefined>(undefined);
 
-  // Caregiver Registration Form State
+  // Caregiver Registration Form State (ALL FIELDS MANDATORY)
   const [regCaregiverName, setRegCaregiverName] = useState('');
   const [regCaregiverUsername, setRegCaregiverUsername] = useState('');
   const [regCaregiverRelation, setRegCaregiverRelation] = useState('Daughter');
   const [regCaregiverPhone, setRegCaregiverPhone] = useState('');
   const [regCaregiverEmail, setRegCaregiverEmail] = useState('');
   const [regCaregiverPin, setRegCaregiverPin] = useState('');
+  const [regCaregiverConfirmPin, setRegCaregiverConfirmPin] = useState('');
   const [regCaregiverKey, setRegCaregiverKey] = useState('');
 
+  // UI state
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [isForgotModalOpen, setIsForgotModalOpen] = useState(false);
+  const [isVoiceModalOpen, setIsVoiceModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Handle Patient Log In (STRICT: No universal 1234 bypass)
-  const handlePatientLogin = (e?: React.FormEvent) => {
+  // Background server sync on mount
+  useEffect(() => {
+    OfflineStore.syncWithServer();
+  }, []);
+
+  // Handle Patient Log In (with Mobile Number or Username + Password)
+  const handlePatientLogin = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setErrorMsg(null);
     setSuccessMsg(null);
 
     const inputTrimmed = patientLoginInput.trim();
     if (!inputTrimmed) {
-      setErrorMsg('Please enter your full name, username, or mobile number.');
-      return;
-    }
-
-    const inputLower = inputTrimmed.toLowerCase();
-    if (inputLower.includes('anima') || inputLower.includes('aita')) {
-      setErrorMsg('No account found with those details. Please check your username or mobile number.');
-      return;
-    }
-
-    const cleanDigits = inputTrimmed.replace(/\D/g, '');
-    const allPatients = OfflineStore.getPatients();
-
-    if (allPatients.length === 0) {
-      setErrorMsg('No accounts registered yet. Click "Create Account" to register.');
-      return;
-    }
-
-    // Strict matching
-    const target = allPatients.find((p) => {
-      const pFullName = p.fullName.trim().toLowerCase();
-      const pPrefName = (p.preferredName || '').trim().toLowerCase();
-      const pUsername = (p.username || '').trim().toLowerCase();
-      const pPhoneDigits = (p.phone || '').trim().replace(/\D/g, '');
-
-      return (
-        pFullName === inputLower ||
-        pPrefName === inputLower ||
-        pUsername === inputLower ||
-        (cleanDigits.length >= 7 && pPhoneDigits.endsWith(cleanDigits))
-      );
-    });
-
-    if (!target) {
-      setErrorMsg('No patient account found with those details. Please check spelling or create an account.');
+      setErrorMsg('Please enter your mobile number or username.');
       return;
     }
 
     if (!patientPassword.trim()) {
-      setErrorMsg('Please enter your password or security PIN.');
+      setErrorMsg('Please enter your password.');
       return;
     }
 
-    // STRICT: Match target's actual password or pin only. No global '1234' bypass!
-    const validCredentials = [target.password, target.pin].filter(Boolean);
-    const entered = patientPassword.trim();
+    setIsSubmitting(true);
 
-    if (!validCredentials.includes(entered)) {
-      setErrorMsg('Incorrect password or PIN. Use "Forgot PIN?" below if you need assistance.');
-      return;
+    try {
+      // 1. Try server-side authentication API first
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          identifier: inputTrimmed,
+          password: patientPassword.trim(),
+          role: 'PATIENT',
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const target: PatientProfile = data.patient;
+
+        // Persist session across refresh and re-open (1 year expiry)
+        OfflineStore.saveAuthSession({
+          role: 'PATIENT',
+          patientId: target.id,
+          userName: target.username || target.fullName,
+          expiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000,
+        });
+        OfflineStore.savePatient(target);
+        OfflineStore.setActivePatientId(target.id);
+
+        VoiceService.speak(`Welcome back, ${target.preferredName || target.fullName}. Entering your space.`, lang);
+        onLoginPatient(target);
+        return;
+      }
+
+      // If server returned a 401 or 400 error, read error
+      if (res.status === 401 || res.status === 400) {
+        const err = await res.json();
+        // Fallback to local offline check before failing
+        const cleanDigits = inputTrimmed.replace(/\D/g, '');
+        const inputLower = inputTrimmed.toLowerCase();
+        const localPatients = OfflineStore.getPatients();
+
+        const localTarget = localPatients.find((p) => {
+          const pUsername = (p.username || '').trim().toLowerCase();
+          const pPhoneDigits = (p.phone || '').trim().replace(/\D/g, '');
+          const pFullName = p.fullName.trim().toLowerCase();
+          return (
+            (cleanDigits.length >= 10 && pPhoneDigits.endsWith(cleanDigits)) ||
+            pUsername === inputLower ||
+            pFullName === inputLower
+          );
+        });
+
+        if (localTarget && (localTarget.password === patientPassword.trim() || localTarget.pin === patientPassword.trim())) {
+          OfflineStore.saveAuthSession({
+            role: 'PATIENT',
+            patientId: localTarget.id,
+            userName: localTarget.username || localTarget.fullName,
+            expiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000,
+          });
+          OfflineStore.setActivePatientId(localTarget.id);
+          VoiceService.speak(`Welcome, ${localTarget.preferredName || localTarget.fullName}. Entering your space.`, lang);
+          onLoginPatient(localTarget);
+          return;
+        }
+
+        setErrorMsg(err.error || 'Invalid credentials. Please check your mobile number and password.');
+        return;
+      }
+
+      throw new Error('Server unreachable');
+    } catch (err: any) {
+      // Offline fallback
+      const cleanDigits = inputTrimmed.replace(/\D/g, '');
+      const inputLower = inputTrimmed.toLowerCase();
+      const allPatients = OfflineStore.getPatients();
+
+      const target = allPatients.find((p) => {
+        const pUsername = (p.username || '').trim().toLowerCase();
+        const pPhoneDigits = (p.phone || '').trim().replace(/\D/g, '');
+        const pFullName = p.fullName.trim().toLowerCase();
+        return (
+          (cleanDigits.length >= 7 && pPhoneDigits.endsWith(cleanDigits)) ||
+          pUsername === inputLower ||
+          pFullName === inputLower
+        );
+      });
+
+      if (!target) {
+        setErrorMsg('No account found with this mobile number or username. Please register.');
+        return;
+      }
+
+      const validCredentials = [target.password, target.pin].filter(Boolean);
+      if (!validCredentials.includes(patientPassword.trim())) {
+        setErrorMsg('Incorrect password. Please try again or use "Forgot PIN?".');
+        return;
+      }
+
+      OfflineStore.saveAuthSession({
+        role: 'PATIENT',
+        patientId: target.id,
+        userName: target.username || target.fullName,
+        expiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000,
+      });
+      OfflineStore.setActivePatientId(target.id);
+      VoiceService.speak(`Welcome ${target.preferredName || target.fullName}. Entering your space.`, lang);
+      onLoginPatient(target);
+    } finally {
+      setIsSubmitting(false);
     }
-
-    // Persist session across refresh and re-open
-    OfflineStore.saveAuthSession({
-      role: 'PATIENT',
-      patientId: target.id,
-      userName: target.username || target.fullName,
-      expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000,
-    });
-    VoiceService.speak(`Welcome ${target.preferredName || target.fullName}. Entering your space.`, lang);
-    OfflineStore.setActivePatientId(target.id);
-    onLoginPatient(target);
   };
 
-  // Handle Patient Registration
-  const handlePatientRegister = (e: React.FormEvent) => {
+  // Handle Patient Registration (ALL FIELDS MANDATORY, FLOW: Register -> Login -> App)
+  const handlePatientRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
     setSuccessMsg(null);
 
     const fullNameTrim = regFullName.trim();
     if (!fullNameTrim) {
-      setErrorMsg('Please enter your full name.');
+      setErrorMsg('Full Name is mandatory. Please enter your name.');
       return;
     }
 
-    const usernameTrim = (regUsername.trim() || fullNameTrim.toLowerCase().replace(/\s+/g, ''));
-    if (!usernameTrim) {
-      setErrorMsg('Please enter a username.');
+    const usernameTrim = regUsername.trim().toLowerCase().replace(/\s+/g, '');
+    if (!usernameTrim || usernameTrim.length < 3) {
+      setErrorMsg('Username is mandatory and must be at least 3 characters.');
       return;
     }
 
-    // Check if username already exists
-    const allPatients = OfflineStore.getPatients();
-    const isDuplicateUsername = allPatients.some(
-      (p) => (p.username || '').toLowerCase() === usernameTrim.toLowerCase()
-    );
-    if (isDuplicateUsername) {
-      setErrorMsg('Username already exists');
+    const phoneTrim = regPhone.trim().replace(/\D/g, '');
+    if (!phoneTrim || phoneTrim.length < 10) {
+      setErrorMsg('Mobile Number is mandatory. Please enter a valid 10-digit mobile number.');
+      return;
+    }
+
+    const ageNum = parseInt(regAge, 10);
+    if (!regAge.trim() || isNaN(ageNum) || ageNum < 40 || ageNum > 120) {
+      setErrorMsg('Please enter a valid age (between 40 and 120).');
+      return;
+    }
+
+    if (!regState) {
+      setErrorMsg('Please select your state/region.');
       return;
     }
 
     if (!regPassword.trim() || regPassword.trim().length < 4) {
-      setErrorMsg('Please create a password or PIN at least 4 characters long.');
+      setErrorMsg('Password is mandatory and must be at least 4 characters long.');
       return;
     }
 
-    const newPatient: PatientProfile = {
-      id: `patient-${Date.now()}`,
-      fullName: fullNameTrim,
-      preferredName: regPreferredName.trim() || fullNameTrim.split(' ')[0],
-      username: usernameTrim,
-      age: parseInt(regAge, 10) || 72,
-      region: 'Assam',
-      state: 'Assam',
-      preferredLanguage: lang,
-      caregiverName: 'Self',
-      caregiverPhone: '',
-      linkedCaregiverKey: '',
-      avatarUrl: regAvatar || '',
-      dailyStreak: 1,
-      todayCompletedCount: 0,
-      password: regPassword.trim(),
-      pin: regPassword.trim(),
-      phone: regPhone.trim(),
-      hasCaregiver: false,
-    };
+    if (regPassword.trim() !== regConfirmPassword.trim()) {
+      setErrorMsg('Passwords do not match. Please re-enter your password.');
+      return;
+    }
 
-    OfflineStore.addPatient(newPatient);
-    OfflineStore.setActivePatientId(newPatient.id);
-    OfflineStore.saveAuthSession({
-      role: 'PATIENT',
-      patientId: newPatient.id,
-      userName: newPatient.username || newPatient.fullName,
-      expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000,
-    });
-    VoiceService.speak(`Account created. Welcome to your space, ${newPatient.preferredName}.`, lang);
-    onLoginPatient(newPatient);
+    setIsSubmitting(true);
+
+    try {
+      const patientId = `patient-${Date.now()}`;
+      const newPatient: PatientProfile = {
+        id: patientId,
+        fullName: fullNameTrim,
+        preferredName: regPreferredName.trim() || fullNameTrim.split(' ')[0],
+        username: usernameTrim,
+        age: ageNum,
+        region: regState,
+        state: regState,
+        preferredLanguage: regPreferredLang,
+        caregiverName: 'Family Caregiver',
+        caregiverPhone: '',
+        linkedCaregiverKey: '',
+        avatarUrl: regAvatar || '',
+        dailyStreak: 0,
+        todayCompletedCount: 0,
+        password: regPassword.trim(),
+        pin: regPassword.trim(),
+        phone: phoneTrim,
+        hasCaregiver: false,
+      };
+
+      // 1. Send registration to Server Database
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          role: 'PATIENT',
+          profile: newPatient,
+          password: regPassword.trim(),
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setErrorMsg(data.error || 'Registration failed. Please check the details.');
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Also save in local offline store
+      OfflineStore.addPatient(newPatient);
+
+      // FLOW REQUIREMENT: Register -> Login -> App
+      // Switch immediately to LOGIN mode with phone pre-filled
+      setAuthMode('LOGIN');
+      setPatientLoginInput(phoneTrim);
+      setPatientPassword('');
+      setRegPassword('');
+      setRegConfirmPassword('');
+
+      setSuccessMsg('Account registered successfully in database! Please enter your password to log in.');
+      VoiceService.speak('Registration successful. Please enter your password to log in.', lang);
+    } catch (err: any) {
+      setErrorMsg('Network error while saving account. Please try again.');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
-  // Handle Caregiver Log In (STRICT: No universal 1234 bypass)
-  const handleCaregiverLogin = (e?: React.FormEvent) => {
+  // Handle Caregiver Log In (Mobile Number or Username + Password)
+  const handleCaregiverLogin = async (e?: React.FormEvent) => {
     if (e) e.preventDefault();
     setErrorMsg(null);
     setSuccessMsg(null);
 
     const inputTrimmed = caregiverLoginInput.trim();
     if (!inputTrimmed) {
-      setErrorMsg('Please enter your caregiver username, email, or mobile.');
-      return;
-    }
-
-    const inputLower = inputTrimmed.toLowerCase();
-    const cleanDigits = inputTrimmed.replace(/\D/g, '');
-    const allCaretakers = OfflineStore.getCaretakers();
-
-    if (allCaretakers.length === 0) {
-      setErrorMsg('No caregiver accounts registered yet. Click "Create Account" to register.');
-      return;
-    }
-
-    const target = allCaretakers.find((c) => {
-      const cFullName = c.fullName.trim().toLowerCase();
-      const cEmail = (c.email || '').trim().toLowerCase();
-      const cUsername = (c.username || '').trim().toLowerCase();
-      const cPhoneDigits = (c.phone || '').trim().replace(/\D/g, '');
-
-      return (
-        cFullName === inputLower ||
-        cEmail === inputLower ||
-        cUsername === inputLower ||
-        (cleanDigits.length >= 7 && cPhoneDigits.endsWith(cleanDigits))
-      );
-    });
-
-    if (!target) {
-      setErrorMsg('Incorrect username or email. Please check spelling or register.');
+      setErrorMsg('Please enter your mobile number or username.');
       return;
     }
 
     if (!caregiverPin.trim()) {
-      setErrorMsg('Please enter your password or security PIN.');
+      setErrorMsg('Please enter your password or PIN.');
       return;
     }
 
-    // STRICT: Check actual stored password/pin only
-    const validCredentials = [target.password, target.pin].filter(Boolean);
-    if (!validCredentials.includes(caregiverPin.trim())) {
-      setErrorMsg('Incorrect PIN or password.');
-      return;
+    setIsSubmitting(true);
+
+    try {
+      const res = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          identifier: inputTrimmed,
+          password: caregiverPin.trim(),
+          role: 'CAREGIVER',
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        const target: CaretakerProfile = data.caretaker;
+        const assignedPatient: PatientProfile = data.patient || OfflineStore.getPatients()[0];
+
+        OfflineStore.saveAuthSession({
+          role: 'CAREGIVER',
+          caretakerId: target.id,
+          patientId: assignedPatient?.id || '',
+          userName: target.username || target.fullName,
+          expiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000,
+        });
+        OfflineStore.addCaretaker(target);
+        OfflineStore.setActiveCaretakerId(target.id);
+
+        onLoginCaregiver(target, assignedPatient);
+        return;
+      }
+
+      const errData = await res.json();
+      setErrorMsg(errData.error || 'Incorrect caregiver mobile number or password.');
+    } catch (err) {
+      // Offline fallback
+      const inputLower = inputTrimmed.toLowerCase();
+      const cleanDigits = inputTrimmed.replace(/\D/g, '');
+      const allCaretakers = OfflineStore.getCaretakers();
+
+      const target = allCaretakers.find((c) => {
+        const cPhoneDigits = (c.phone || '').trim().replace(/\D/g, '');
+        const cUsername = (c.username || '').trim().toLowerCase();
+        const cFullName = c.fullName.trim().toLowerCase();
+        return (
+          (cleanDigits.length >= 7 && cPhoneDigits.endsWith(cleanDigits)) ||
+          cUsername === inputLower ||
+          cFullName === inputLower
+        );
+      });
+
+      if (!target) {
+        setErrorMsg('No caregiver account found with this mobile number or username.');
+        return;
+      }
+
+      const validCredentials = [target.password, target.pin].filter(Boolean);
+      if (!validCredentials.includes(caregiverPin.trim())) {
+        setErrorMsg('Incorrect password or PIN.');
+        return;
+      }
+
+      const allPatients = OfflineStore.getPatients();
+      const assignedPatient =
+        allPatients.find((p) => target.assignedPatientIds.includes(p.id)) ||
+        allPatients[0];
+
+      OfflineStore.saveAuthSession({
+        role: 'CAREGIVER',
+        caretakerId: target.id,
+        patientId: assignedPatient?.id || '',
+        userName: target.username || target.fullName,
+        expiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000,
+      });
+      OfflineStore.setActiveCaretakerId(target.id);
+      onLoginCaregiver(target, assignedPatient);
+    } finally {
+      setIsSubmitting(false);
     }
-
-    const allPatients = OfflineStore.getPatients();
-    // Find assigned patient, or active patient, or fallback to first
-    const assignedPatient =
-      allPatients.find((p) => target.assignedPatientIds.includes(p.id)) ||
-      allPatients.find((p) => p.id === OfflineStore.getActivePatientId()) ||
-      allPatients[0];
-
-    if (!assignedPatient) {
-      setErrorMsg('No linked patient found. Please link a patient profile using their Caregiver Key.');
-      return;
-    }
-
-    OfflineStore.saveAuthSession({
-      role: 'CAREGIVER',
-      caretakerId: target.id,
-      patientId: assignedPatient.id,
-      userName: target.username || target.fullName,
-      expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000,
-    });
-    OfflineStore.setActiveCaretakerId(target.id);
-    onLoginCaregiver(target, assignedPatient);
   };
 
-  // Handle Caregiver Registration (With optional Caregiver Key linking)
-  const handleCaregiverRegister = (e: React.FormEvent) => {
+  // Handle Caregiver Registration (ALL FIELDS MANDATORY, FLOW: Register -> Login -> App)
+  const handleCaregiverRegister = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMsg(null);
     setSuccessMsg(null);
 
     const nameTrim = regCaregiverName.trim();
     if (!nameTrim) {
-      setErrorMsg('Please enter your name.');
+      setErrorMsg('Full Name is mandatory.');
       return;
     }
 
-    const usernameTrim = (regCaregiverUsername.trim() || nameTrim.toLowerCase().replace(/\s+/g, ''));
-    if (!usernameTrim) {
-      setErrorMsg('Please enter a username.');
+    const usernameTrim = regCaregiverUsername.trim().toLowerCase().replace(/\s+/g, '');
+    if (!usernameTrim || usernameTrim.length < 3) {
+      setErrorMsg('Username is mandatory and must be at least 3 characters.');
       return;
     }
 
-    const allCaretakers = OfflineStore.getCaretakers();
-    const isDuplicateUsername = allCaretakers.some(
-      (c) => (c.username || '').toLowerCase() === usernameTrim.toLowerCase()
-    );
-    if (isDuplicateUsername) {
-      setErrorMsg('Username already exists');
+    const phoneTrim = regCaregiverPhone.trim().replace(/\D/g, '');
+    if (!phoneTrim || phoneTrim.length < 10) {
+      setErrorMsg('Mobile Number is mandatory. Please enter a valid 10-digit mobile number.');
+      return;
+    }
+
+    if (!regCaregiverRelation) {
+      setErrorMsg('Please select your relationship.');
       return;
     }
 
     if (!regCaregiverPin.trim() || regCaregiverPin.trim().length < 4) {
-      setErrorMsg('Please create a password or PIN at least 4 characters long.');
+      setErrorMsg('Password / PIN is mandatory and must be at least 4 characters.');
       return;
     }
 
-    // Create Caretaker Profile
-    const newCaretakerId = `caretaker-${Date.now()}`;
-    const newCaretaker: CaretakerProfile = {
-      id: newCaretakerId,
-      fullName: nameTrim,
-      username: usernameTrim,
-      password: regCaregiverPin.trim(),
-      pin: regCaregiverPin.trim(),
-      caregiverKey: OfflineStore.generateCaregiverKey(),
-      relation: regCaregiverRelation.trim() || 'Primary Caregiver',
-      phone: regCaregiverPhone.trim() || '',
-      email: regCaregiverEmail.trim(),
-      assignedPatientIds: [],
-    };
+    if (regCaregiverPin.trim() !== regCaregiverConfirmPin.trim()) {
+      setErrorMsg('Passwords do not match. Please re-enter your password.');
+      return;
+    }
 
-    // If caregiver provided a key, link immediately
-    if (regCaregiverKey.trim()) {
-      OfflineStore.addCaretaker(newCaretaker);
-      const linkResult = OfflineStore.linkCaregiverToPatientByKey(newCaretakerId, regCaregiverKey);
-      if (!linkResult.success) {
-        setErrorMsg(linkResult.error || 'Invalid Caregiver Key. Account created, but please verify patient key.');
+    setIsSubmitting(true);
+
+    try {
+      const newCaretakerId = `caretaker-${Date.now()}`;
+      const newCaretaker: CaretakerProfile = {
+        id: newCaretakerId,
+        fullName: nameTrim,
+        username: usernameTrim,
+        password: regCaregiverPin.trim(),
+        pin: regCaregiverPin.trim(),
+        caregiverKey: OfflineStore.generateCaregiverKey(),
+        relation: regCaregiverRelation.trim() || 'Primary Caregiver',
+        phone: phoneTrim,
+        email: regCaregiverEmail.trim(),
+        assignedPatientIds: [],
+      };
+
+      // 1. Send registration to Server Database
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          role: 'CAREGIVER',
+          profile: newCaretaker,
+          password: regCaregiverPin.trim(),
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        setErrorMsg(data.error || 'Registration failed. Please check the details.');
+        setIsSubmitting(false);
         return;
       }
-      OfflineStore.saveAuthSession({
-        role: 'CAREGIVER',
-        caretakerId: newCaretaker.id,
-        patientId: linkResult.patient!.id,
-        userName: newCaretaker.username || newCaretaker.fullName,
-        expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000,
-      });
-      OfflineStore.setActiveCaretakerId(newCaretaker.id);
-      onLoginCaregiver(newCaretaker, linkResult.patient!);
-      return;
-    }
 
-    // Otherwise link to any existing patient or wait for link
-    const allPatients = OfflineStore.getPatients();
-    if (allPatients.length > 0) {
-      newCaretaker.assignedPatientIds = [allPatients[0].id];
-      OfflineStore.addCaretaker(newCaretaker);
-      OfflineStore.saveAuthSession({
-        role: 'CAREGIVER',
-        caretakerId: newCaretaker.id,
-        patientId: allPatients[0].id,
-        userName: newCaretaker.username || newCaretaker.fullName,
-        expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000,
-      });
-      OfflineStore.setActiveCaretakerId(newCaretaker.id);
-      onLoginCaregiver(newCaretaker, allPatients[0]);
-    } else {
-      OfflineStore.addCaretaker(newCaretaker);
-      OfflineStore.saveAuthSession({
-        role: 'CAREGIVER',
-        caretakerId: newCaretaker.id,
-        userName: newCaretaker.username || newCaretaker.fullName,
-        expiresAt: Date.now() + 30 * 24 * 60 * 60 * 1000,
-      });
-      OfflineStore.setActiveCaretakerId(newCaretaker.id);
-      setErrorMsg('Caregiver account created! No patient profile exists yet. Please create a patient account to link.');
+      // If caregiver provided a key, link locally as well
+      if (regCaregiverKey.trim()) {
+        OfflineStore.addCaretaker(newCaretaker);
+        OfflineStore.linkCaregiverToPatientByKey(newCaretakerId, regCaregiverKey);
+      } else {
+        OfflineStore.addCaretaker(newCaretaker);
+      }
+
+      // FLOW REQUIREMENT: Register -> Login -> App
+      setAuthMode('LOGIN');
+      setCaregiverLoginInput(phoneTrim);
+      setCaregiverPin('');
+      setRegCaregiverPin('');
+      setRegCaregiverConfirmPin('');
+
+      setSuccessMsg('Caregiver account created successfully in database! Please enter your password to log in.');
+      VoiceService.speak('Registration successful. Please enter your password to log in.', lang);
+    } catch (err) {
+      setErrorMsg('Failed to create caregiver account. Please check your connection.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -391,45 +553,71 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
       {/* Top Header */}
       <header className="max-w-4xl w-full mx-auto flex items-center justify-between py-4 border-b border-stone-200 dark:border-stone-800">
         <div>
-          <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold font-serif-heading text-stone-900 dark:text-stone-100 tracking-tight">
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-extrabold font-serif-heading text-stone-900 dark:text-stone-100 tracking-tight">
             CognitiveSaathi
           </h1>
-          <p className="text-xs sm:text-sm text-stone-600 dark:text-stone-400 font-medium mt-1">
-            Cognitive Care & Memory Assistance Platform • Northeast India (NER)
+          <p className="text-xs sm:text-sm text-stone-600 dark:text-stone-400 font-medium mt-0.5">
+            Cognitive Care & Memory Assistance • Persistent Database Login
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
-          <span className="hidden sm:inline-flex items-center gap-1.5 text-[11px] font-semibold text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-1 rounded-full border border-emerald-200 dark:border-emerald-800">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            Offline Ready
-          </span>
+        <div className="flex items-center gap-2 sm:gap-3">
+          {/* Voice Pack & Audio Quality Button */}
+          <button
+            type="button"
+            onClick={() => setIsVoiceModalOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-100 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-700 text-amber-950 dark:text-amber-200 text-xs font-bold hover:bg-amber-200 dark:hover:bg-amber-900/80 transition"
+            title="Download Voice Pack & Audio Tuning"
+          >
+            <Volume2 className="w-4 h-4 text-amber-700 dark:text-amber-300" />
+            <span className="hidden sm:inline">Voice Pack</span>
+          </button>
+
+          {/* Dark / Light Theme Toggle */}
+          {onToggleTheme && (
+            <button
+              type="button"
+              onClick={onToggleTheme}
+              className="p-2 rounded-full border border-stone-300 dark:border-stone-700 bg-white dark:bg-[#1A222C] text-stone-700 dark:text-stone-300 hover:bg-stone-100 dark:hover:bg-stone-800 transition shadow-2xs"
+              title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+              aria-label="Toggle Theme"
+            >
+              {theme === 'dark' ? (
+                <Sun className="w-4 h-4 text-amber-400" />
+              ) : (
+                <Moon className="w-4 h-4 text-stone-700" />
+              )}
+            </button>
+          )}
+
           <LanguageDropdown currentLang={lang} onSelectLang={onLangChange} />
         </div>
       </header>
 
       {/* Main Authentication Flow Container */}
-      <main className="max-w-2xl w-full mx-auto py-6 sm:py-10 space-y-6 animate-fadeIn">
+      <main className="max-w-2xl w-full mx-auto py-6 sm:py-8 space-y-5 animate-fadeIn">
+        {/* Success Alert */}
         {successMsg && (
-          <div className="p-3.5 bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 rounded-2xl text-xs font-semibold text-emerald-800 dark:text-emerald-300 flex items-center gap-2">
-            <CheckCircle2 className="w-4 h-4 shrink-0" />
+          <div className="p-4 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-700 rounded-2xl text-xs sm:text-sm font-bold text-emerald-900 dark:text-emerald-200 flex items-center gap-2.5 shadow-xs">
+            <CheckCircle2 className="w-5 h-5 text-emerald-600 dark:text-emerald-400 shrink-0" />
             <span>{successMsg}</span>
           </div>
         )}
 
+        {/* Error Alert */}
         {errorMsg && (
-          <div className="p-4 bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 rounded-2xl text-xs font-semibold text-rose-700 dark:text-rose-300 flex items-center justify-center gap-2 text-center">
-            <AlertTriangle className="w-4 h-4 shrink-0" />
+          <div className="p-4 bg-rose-50 dark:bg-rose-950/70 border border-rose-300 dark:border-rose-700 rounded-2xl text-xs sm:text-sm font-bold text-rose-800 dark:text-rose-200 flex items-center gap-2.5 shadow-xs">
+            <AlertTriangle className="w-5 h-5 text-rose-600 dark:text-rose-400 shrink-0" />
             <span>{errorMsg}</span>
           </div>
         )}
 
         {/* Space Selection (Patient Space vs Caregiver Space) */}
-        <div className="space-y-3">
+        <div className="space-y-2">
           <span className="text-xs font-bold uppercase tracking-wider text-stone-500 dark:text-stone-400 block text-center">
-            Select Your Space
+            Select Your Role
           </span>
-          <div className="grid grid-cols-2 gap-4 sm:gap-6">
+          <div className="grid grid-cols-2 gap-3 sm:gap-5">
             {/* 1. Patient Space */}
             <button
               type="button"
@@ -439,24 +627,24 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                 setErrorMsg(null);
                 setSuccessMsg(null);
               }}
-              className={`p-5 sm:p-6 rounded-3xl border-2 transition text-left flex flex-col items-center sm:items-start gap-3 shadow-xs relative ${
+              className={`p-4 sm:p-5 rounded-3xl border-2 transition text-left flex flex-col items-center sm:items-start gap-2.5 shadow-xs relative ${
                 selectedSpace === 'PATIENT'
-                  ? 'bg-amber-50/70 dark:bg-amber-950/20 border-teal-800 dark:border-teal-400 ring-2 ring-teal-800/20'
+                  ? 'bg-amber-50/80 dark:bg-amber-950/30 border-teal-700 dark:border-teal-400 ring-2 ring-teal-700/20'
                   : 'bg-white dark:bg-[#1A222C] border-stone-200 dark:border-stone-700 hover:border-stone-300 dark:hover:border-stone-600'
               }`}
             >
-              <div className="w-14 h-14 rounded-2xl bg-amber-100 dark:bg-amber-950/60 text-rose-500 flex items-center justify-center shadow-xs border border-amber-200 dark:border-amber-800">
-                <Heart className="w-7 h-7 fill-current" />
+              <div className="w-12 h-12 rounded-2xl bg-amber-100 dark:bg-amber-950/60 text-rose-600 flex items-center justify-center shadow-xs border border-amber-200 dark:border-amber-800">
+                <Heart className="w-6 h-6 fill-current" />
               </div>
               <div className="text-center sm:text-left">
                 <div className="flex items-center justify-center sm:justify-start gap-1.5">
-                  <h3 className="text-base sm:text-lg font-bold text-stone-900 dark:text-stone-100">
+                  <h3 className="text-sm sm:text-base font-bold text-stone-900 dark:text-stone-100">
                     Patient Space
                   </h3>
-                  {selectedSpace === 'PATIENT' && <CheckCircle2 className="w-4 h-4 text-teal-800 dark:text-teal-400" />}
+                  {selectedSpace === 'PATIENT' && <CheckCircle2 className="w-4 h-4 text-teal-700 dark:text-teal-400" />}
                 </div>
-                <p className="text-xs text-stone-500 dark:text-stone-400 mt-0.5">
-                  Gentle daily routines & memory exercises
+                <p className="text-[11px] text-stone-500 dark:text-stone-400 mt-0.5">
+                  Daily routines, exercises & voice saathi
                 </p>
               </div>
             </button>
@@ -470,24 +658,24 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                 setErrorMsg(null);
                 setSuccessMsg(null);
               }}
-              className={`p-5 sm:p-6 rounded-3xl border-2 transition text-left flex flex-col items-center sm:items-start gap-3 shadow-xs relative ${
+              className={`p-4 sm:p-5 rounded-3xl border-2 transition text-left flex flex-col items-center sm:items-start gap-2.5 shadow-xs relative ${
                 selectedSpace === 'CAREGIVER'
-                  ? 'bg-teal-50/70 dark:bg-teal-950/20 border-teal-800 dark:border-teal-400 ring-2 ring-teal-800/20'
+                  ? 'bg-teal-50/80 dark:bg-teal-950/30 border-teal-700 dark:border-teal-400 ring-2 ring-teal-700/20'
                   : 'bg-white dark:bg-[#1A222C] border-stone-200 dark:border-stone-700 hover:border-stone-300 dark:hover:border-stone-600'
               }`}
             >
-              <div className="w-14 h-14 rounded-2xl bg-teal-100 dark:bg-teal-950/60 text-teal-800 dark:text-teal-300 flex items-center justify-center shadow-xs border border-teal-200 dark:border-teal-800">
-                <ShieldCheck className="w-7 h-7" />
+              <div className="w-12 h-12 rounded-2xl bg-teal-100 dark:bg-teal-950/60 text-teal-800 dark:text-teal-300 flex items-center justify-center shadow-xs border border-teal-200 dark:border-teal-800">
+                <ShieldCheck className="w-6 h-6" />
               </div>
               <div className="text-center sm:text-left">
                 <div className="flex items-center justify-center sm:justify-start gap-1.5">
-                  <h3 className="text-base sm:text-lg font-bold text-stone-900 dark:text-stone-100">
+                  <h3 className="text-sm sm:text-base font-bold text-stone-900 dark:text-stone-100">
                     Caregiver Space
                   </h3>
                   {selectedSpace === 'CAREGIVER' && <CheckCircle2 className="w-4 h-4 text-teal-800 dark:text-teal-400" />}
                 </div>
-                <p className="text-xs text-stone-500 dark:text-stone-400 mt-0.5">
-                  Family schedules, routines & alerts
+                <p className="text-[11px] text-stone-500 dark:text-stone-400 mt-0.5">
+                  Family schedules, alerts & monitoring
                 </p>
               </div>
             </button>
@@ -495,14 +683,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         </div>
 
         {/* Space Authentication Card */}
-        <div className="rounded-3xl bg-white dark:bg-[#1A222C] border border-stone-200 dark:border-stone-700 p-6 sm:p-8 shadow-xs space-y-6">
+        <div className="rounded-3xl bg-white dark:bg-[#1A222C] border border-stone-200 dark:border-stone-700 p-5 sm:p-7 shadow-xs space-y-5">
           {/* Header row: Space Name + Mode Switcher */}
-          <div className="flex items-center justify-between border-b border-stone-100 dark:border-stone-800 pb-4">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-bold text-stone-900 dark:text-stone-100">
-                {selectedSpace === 'PATIENT' ? 'Elder & Patient Space' : 'Caregiver & Health Space'}
-              </span>
-            </div>
+          <div className="flex items-center justify-between border-b border-stone-100 dark:border-stone-800 pb-3.5">
+            <span className="text-sm font-bold text-stone-900 dark:text-stone-100">
+              {selectedSpace === 'PATIENT' ? 'Patient Space' : 'Caregiver Space'} • {authMode === 'LOGIN' ? 'Log In' : 'Register New Account'}
+            </span>
 
             <div className="flex items-center gap-1 bg-stone-100 dark:bg-stone-800 p-1 rounded-xl text-xs font-semibold">
               <button
@@ -533,7 +719,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                     : 'text-stone-500 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200'
                 }`}
               >
-                Create Account
+                Register
               </button>
             </div>
           </div>
@@ -542,15 +728,15 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           {selectedSpace === 'PATIENT' && (
             <>
               {authMode === 'LOGIN' ? (
-                /* Patient Login Form */
-                <form onSubmit={handlePatientLogin} className="space-y-5">
-                  <div className="space-y-4">
-                    <div className="space-y-1.5">
+                /* Patient Login Form (Mobile Number & Password) */
+                <form onSubmit={handlePatientLogin} className="space-y-4">
+                  <div className="space-y-3.5">
+                    <div className="space-y-1">
                       <label htmlFor="patient-login-input" className="text-xs font-bold text-stone-700 dark:text-stone-300 block">
-                        Full Name, Username, or Mobile:
+                        Mobile Number or Username <span className="text-rose-500">*</span>:
                       </label>
                       <div className="relative">
-                        <User className="w-4 h-4 text-stone-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                        <Phone className="w-4 h-4 text-stone-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                         <input
                           id="patient-login-input"
                           type="text"
@@ -560,23 +746,23 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                             setPatientLoginInput(e.target.value);
                             if (errorMsg) setErrorMsg(null);
                           }}
-                          placeholder="e.g. ramesh or Ramesh Sharma"
-                          className="w-full pl-10 pr-4 py-3 rounded-2xl border border-stone-300 dark:border-stone-600 text-sm font-semibold text-stone-900 dark:text-stone-100 focus:outline-teal-800 bg-white dark:bg-[#121820]"
+                          placeholder="e.g. 9435012345 or username"
+                          className="w-full pl-10 pr-4 py-3 rounded-2xl border border-stone-300 dark:border-stone-600 text-sm font-semibold text-stone-900 dark:text-stone-100 focus:ring-2 focus:ring-teal-600 focus:outline-none bg-white dark:bg-[#121820]"
                         />
                       </div>
                     </div>
 
-                    <div className="space-y-1.5">
+                    <div className="space-y-1">
                       <div className="flex items-center justify-between">
                         <label htmlFor="patient-password-input" className="text-xs font-bold text-stone-700 dark:text-stone-300 block">
-                          Password or 4-Digit PIN:
+                          Password <span className="text-rose-500">*</span>:
                         </label>
                         <button
                           type="button"
                           onClick={() => setIsForgotModalOpen(true)}
-                          className="text-xs font-bold text-teal-800 dark:text-teal-400 hover:underline inline-flex items-center gap-1"
+                          className="text-xs font-bold text-teal-700 dark:text-teal-400 hover:underline inline-flex items-center gap-1"
                         >
-                          <KeyRound className="w-3 h-3" />
+                          <KeyRound className="w-3.5 h-3.5" />
                           <span>Forgot PIN?</span>
                         </button>
                       </div>
@@ -591,8 +777,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                             setPatientPassword(e.target.value);
                             if (errorMsg) setErrorMsg(null);
                           }}
-                          placeholder="Enter your personal password or PIN"
-                          className="w-full pl-10 pr-11 py-3 rounded-2xl border border-stone-300 dark:border-stone-600 text-sm font-semibold tracking-widest text-stone-900 dark:text-stone-100 focus:outline-teal-800 bg-white dark:bg-[#121820]"
+                          placeholder="Enter your password"
+                          className="w-full pl-10 pr-11 py-3 rounded-2xl border border-stone-300 dark:border-stone-600 text-sm font-semibold tracking-wide text-stone-900 dark:text-stone-100 focus:ring-2 focus:ring-teal-600 focus:outline-none bg-white dark:bg-[#121820]"
                         />
                         <button
                           type="button"
@@ -606,62 +792,70 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                     </div>
                   </div>
 
+                  {/* Primary Submit Button */}
                   <button
                     type="submit"
+                    disabled={isSubmitting}
                     id="enter-my-space-btn"
-                    className="w-full flex items-center justify-center gap-2 py-4 px-6 rounded-2xl bg-teal-800 hover:bg-teal-900 text-white font-bold text-sm shadow-xs transition active:scale-98"
+                    className="w-full flex items-center justify-center gap-2.5 py-4 px-6 rounded-2xl bg-teal-700 hover:bg-teal-800 active:bg-teal-900 text-white font-extrabold text-base shadow-md hover:shadow-lg transition-all active:scale-[0.99] disabled:opacity-60 cursor-pointer"
                   >
-                    <Heart className="w-4 h-4 fill-current text-amber-300" />
-                    <span>Enter My Space</span>
-                    <ArrowRight className="w-4 h-4 ml-1" />
+                    {isSubmitting ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <Heart className="w-5 h-5 fill-amber-300 text-amber-300 shrink-0" />
+                    )}
+                    <span className="tracking-wide">
+                      {isSubmitting ? 'Logging in to My Space...' : 'Log In to My Space'}
+                    </span>
+                    <ArrowRight className="w-5 h-5 ml-1 shrink-0" />
                   </button>
 
-                  <div className="text-center pt-2">
+                  <div className="text-center pt-1">
                     <p className="text-xs text-stone-600 dark:text-stone-400">
-                      Don't have an account?{' '}
+                      Need a new account?{' '}
                       <button
                         type="button"
-                        onClick={() => setAuthMode('REGISTER')}
-                        className="font-bold text-teal-800 dark:text-teal-400 hover:underline"
+                        onClick={() => {
+                          setAuthMode('REGISTER');
+                          setErrorMsg(null);
+                          setSuccessMsg(null);
+                        }}
+                        className="font-bold text-teal-700 dark:text-teal-400 hover:underline"
                       >
-                        Create account
+                        Register here
                       </button>
                     </p>
                   </div>
                 </form>
               ) : (
-                /* Patient Register Form */
-                <form onSubmit={handlePatientRegister} className="space-y-5">
-                  <div className="flex flex-col items-center gap-2 pb-2">
-                    <PhotoUploader
-                      currentAvatarUrl={regAvatar}
-                      onPhotoSelected={(dataUrl) => setRegAvatar(dataUrl)}
-                      userName={regFullName || 'Elder User'}
-                      size="lg"
-                    />
-                    <span className="text-[11px] text-stone-500 dark:text-stone-400 font-medium">Add gentle profile photo (optional)</span>
+                /* Patient Register Form (MANDATORY FIELDS, REGISTER -> LOGIN -> APP) */
+                <form onSubmit={handlePatientRegister} className="space-y-4">
+                  <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl text-xs text-amber-900 dark:text-amber-200 flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>All fields marked with <strong className="text-rose-600">*</strong> are mandatory. After registration, please log in with your number & password.</span>
                   </div>
 
-                  <div className="space-y-4">
-                    <div>
-                      <label htmlFor="reg-fullname" className="text-xs font-bold text-stone-700 dark:text-stone-300 block mb-1">
-                        Full Name *
-                      </label>
-                      <input
-                        id="reg-fullname"
-                        type="text"
-                        required
-                        value={regFullName}
-                        onChange={(e) => setRegFullName(e.target.value)}
-                        placeholder="e.g. Maya Phukan"
-                        className="w-full px-4 py-3 rounded-2xl border border-stone-300 dark:border-stone-600 text-sm font-semibold text-stone-900 dark:text-stone-100 focus:outline-teal-800 bg-stone-50/50 dark:bg-[#121820]"
-                      />
-                    </div>
-
+                  <div className="space-y-3">
+                    {/* Full Name & Username */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
+                        <label htmlFor="reg-fullname" className="text-xs font-bold text-stone-700 dark:text-stone-300 block mb-1">
+                          Full Name <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          id="reg-fullname"
+                          type="text"
+                          required
+                          value={regFullName}
+                          onChange={(e) => setRegFullName(e.target.value)}
+                          placeholder="e.g. Ramesh Sharma"
+                          className="w-full px-4 py-2.5 rounded-2xl border border-stone-300 dark:border-stone-600 text-sm font-semibold text-stone-900 dark:text-stone-100 focus:ring-2 focus:ring-teal-600 focus:outline-none bg-stone-50/50 dark:bg-[#121820]"
+                        />
+                      </div>
+
+                      <div>
                         <label htmlFor="reg-username" className="text-xs font-bold text-stone-700 dark:text-stone-300 block mb-1">
-                          Username (Unique) *
+                          Unique Username <span className="text-rose-500">*</span>
                         </label>
                         <input
                           id="reg-username"
@@ -669,101 +863,162 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                           required
                           value={regUsername}
                           onChange={(e) => setRegUsername(e.target.value.toLowerCase().replace(/\s+/g, ''))}
-                          placeholder="e.g. mayaphukan"
-                          className="w-full px-4 py-3 rounded-2xl border border-stone-300 dark:border-stone-600 text-sm font-semibold text-stone-900 dark:text-stone-100 focus:outline-teal-800 bg-stone-50/50 dark:bg-[#121820]"
-                        />
-                      </div>
-
-                      <div>
-                        <label htmlFor="reg-prefname" className="text-xs font-bold text-stone-700 dark:text-stone-300 block mb-1">
-                          Preferred Name / Pet Name
-                        </label>
-                        <input
-                          id="reg-prefname"
-                          type="text"
-                          value={regPreferredName}
-                          onChange={(e) => setRegPreferredName(e.target.value)}
-                          placeholder="e.g. Ramesh or Dad"
-                          className="w-full px-4 py-3 rounded-2xl border border-stone-300 dark:border-stone-600 text-sm font-semibold text-stone-900 dark:text-stone-100 focus:outline-teal-800 bg-stone-50/50 dark:bg-[#121820]"
+                          placeholder="e.g. ramesh70"
+                          className="w-full px-4 py-2.5 rounded-2xl border border-stone-300 dark:border-stone-600 text-sm font-semibold text-stone-900 dark:text-stone-100 focus:ring-2 focus:ring-teal-600 focus:outline-none bg-stone-50/50 dark:bg-[#121820]"
                         />
                       </div>
                     </div>
 
+                    {/* Mobile Number & Age */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
-                        <label htmlFor="reg-age" className="text-xs font-bold text-stone-700 dark:text-stone-300 block mb-1">
-                          Age
-                        </label>
-                        <input
-                          id="reg-age"
-                          type="number"
-                          value={regAge}
-                          onChange={(e) => setRegAge(e.target.value)}
-                          placeholder="72"
-                          className="w-full px-4 py-3 rounded-2xl border border-stone-300 dark:border-stone-600 text-sm font-semibold text-stone-900 dark:text-stone-100 focus:outline-teal-800 bg-stone-50/50 dark:bg-[#121820]"
-                        />
-                      </div>
-
-                      <div>
                         <label htmlFor="reg-phone" className="text-xs font-bold text-stone-700 dark:text-stone-300 block mb-1">
-                          Mobile Number
+                          Mobile Number (10 Digits) <span className="text-rose-500">*</span>
                         </label>
                         <input
                           id="reg-phone"
                           type="tel"
+                          required
+                          maxLength={10}
                           value={regPhone}
-                          onChange={(e) => setRegPhone(e.target.value)}
-                          placeholder="e.g. 94350 12345"
-                          className="w-full px-4 py-3 rounded-2xl border border-stone-300 dark:border-stone-600 text-sm font-semibold text-stone-900 dark:text-stone-100 focus:outline-teal-800 bg-stone-50/50 dark:bg-[#121820]"
+                          onChange={(e) => setRegPhone(e.target.value.replace(/\D/g, ''))}
+                          placeholder="e.g. 9435012345"
+                          className="w-full px-4 py-2.5 rounded-2xl border border-stone-300 dark:border-stone-600 text-sm font-semibold text-stone-900 dark:text-stone-100 focus:ring-2 focus:ring-teal-600 focus:outline-none bg-stone-50/50 dark:bg-[#121820]"
+                        />
+                      </div>
+
+                      <div>
+                        <label htmlFor="reg-age" className="text-xs font-bold text-stone-700 dark:text-stone-300 block mb-1">
+                          Age <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          id="reg-age"
+                          type="number"
+                          required
+                          min={40}
+                          max={120}
+                          value={regAge}
+                          onChange={(e) => setRegAge(e.target.value)}
+                          placeholder="70"
+                          className="w-full px-4 py-2.5 rounded-2xl border border-stone-300 dark:border-stone-600 text-sm font-semibold text-stone-900 dark:text-stone-100 focus:ring-2 focus:ring-teal-600 focus:outline-none bg-stone-50/50 dark:bg-[#121820]"
                         />
                       </div>
                     </div>
 
-                    <div>
-                      <label htmlFor="reg-pass" className="text-xs font-bold text-stone-700 dark:text-stone-300 block mb-1">
-                        Create Password / PIN *
-                      </label>
-                      <div className="relative">
-                        <Lock className="w-4 h-4 text-stone-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                        <input
-                          id="reg-pass"
-                          type={showRegPassword ? 'text' : 'password'}
+                    {/* State & Language */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label htmlFor="reg-state" className="text-xs font-bold text-stone-700 dark:text-stone-300 block mb-1">
+                          State / Region <span className="text-rose-500">*</span>
+                        </label>
+                        <select
+                          id="reg-state"
                           required
-                          value={regPassword}
-                          onChange={(e) => setRegPassword(e.target.value)}
-                          placeholder="Create a personal password or 4-digit PIN"
-                          className="w-full pl-10 pr-11 py-3 rounded-2xl border border-stone-300 dark:border-stone-600 text-sm font-semibold tracking-widest text-stone-900 dark:text-stone-100 focus:outline-teal-800 bg-white dark:bg-[#121820]"
-                        />
-                        <button
-                          type="button"
-                          onClick={() => setShowRegPassword(!showRegPassword)}
-                          className="absolute right-3.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 p-1"
-                          aria-label="Toggle password visibility"
+                          value={regState}
+                          onChange={(e) => setRegState(e.target.value)}
+                          className="w-full px-4 py-2.5 rounded-2xl border border-stone-300 dark:border-stone-600 text-sm font-semibold text-stone-900 dark:text-stone-100 focus:ring-2 focus:ring-teal-600 focus:outline-none bg-stone-50/50 dark:bg-[#121820]"
                         >
-                          {showRegPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                        </button>
+                          {NER_STATES.map((s) => (
+                            <option key={s} value={s}>{s}</option>
+                          ))}
+                        </select>
                       </div>
-                      <span className="text-[11px] text-stone-500 dark:text-stone-400 mt-1 block">
-                        A unique Caregiver Key will be automatically generated on your profile for family linking.
-                      </span>
+
+                      <div>
+                        <label htmlFor="reg-language" className="text-xs font-bold text-stone-700 dark:text-stone-300 block mb-1">
+                          Preferred Language <span className="text-rose-500">*</span>
+                        </label>
+                        <select
+                          id="reg-language"
+                          required
+                          value={regPreferredLang}
+                          onChange={(e) => setRegPreferredLang(e.target.value as LanguageCode)}
+                          className="w-full px-4 py-2.5 rounded-2xl border border-stone-300 dark:border-stone-600 text-sm font-semibold text-stone-900 dark:text-stone-100 focus:ring-2 focus:ring-teal-600 focus:outline-none bg-stone-50/50 dark:bg-[#121820]"
+                        >
+                          <option value="en">English</option>
+                          <option value="as">অসমীয়া (Assamese)</option>
+                          <option value="hi">हिन्दी (Hindi)</option>
+                          <option value="mni">মৈতৈলোন্ (Manipuri)</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Password & Confirm Password */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label htmlFor="reg-pass" className="text-xs font-bold text-stone-700 dark:text-stone-300 block mb-1">
+                          Create Password <span className="text-rose-500">*</span>
+                        </label>
+                        <div className="relative">
+                          <Lock className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                          <input
+                            id="reg-pass"
+                            type={showRegPassword ? 'text' : 'password'}
+                            required
+                            minLength={4}
+                            value={regPassword}
+                            onChange={(e) => setRegPassword(e.target.value)}
+                            placeholder="Min 4 characters"
+                            className="w-full pl-9 pr-9 py-2.5 rounded-2xl border border-stone-300 dark:border-stone-600 text-sm font-semibold tracking-wide text-stone-900 dark:text-stone-100 focus:ring-2 focus:ring-teal-600 focus:outline-none bg-white dark:bg-[#121820]"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setShowRegPassword(!showRegPassword)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 p-1"
+                          >
+                            {showRegPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label htmlFor="reg-confirm-pass" className="text-xs font-bold text-stone-700 dark:text-stone-300 block mb-1">
+                          Confirm Password <span className="text-rose-500">*</span>
+                        </label>
+                        <div className="relative">
+                          <Lock className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                          <input
+                            id="reg-confirm-pass"
+                            type={showRegPassword ? 'text' : 'password'}
+                            required
+                            minLength={4}
+                            value={regConfirmPassword}
+                            onChange={(e) => setRegConfirmPassword(e.target.value)}
+                            placeholder="Re-type password"
+                            className="w-full pl-9 pr-3 py-2.5 rounded-2xl border border-stone-300 dark:border-stone-600 text-sm font-semibold tracking-wide text-stone-900 dark:text-stone-100 focus:ring-2 focus:ring-teal-600 focus:outline-none bg-white dark:bg-[#121820]"
+                          />
+                        </div>
+                      </div>
                     </div>
                   </div>
 
                   <button
                     type="submit"
-                    className="w-full flex items-center justify-center gap-2 py-4 px-6 rounded-2xl bg-teal-800 hover:bg-teal-900 text-white font-bold text-sm shadow-xs transition active:scale-98"
+                    disabled={isSubmitting}
+                    id="register-patient-btn"
+                    className="w-full flex items-center justify-center gap-2.5 py-4 px-6 rounded-2xl bg-teal-700 hover:bg-teal-800 active:bg-teal-900 text-white font-extrabold text-base shadow-md hover:shadow-lg transition-all active:scale-[0.99] disabled:opacity-60 cursor-pointer"
                   >
-                    <Heart className="w-4 h-4 fill-current text-amber-300" />
-                    <span>Create Account & Enter My Space</span>
+                    {isSubmitting ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <CheckCircle2 className="w-5 h-5 text-amber-300 shrink-0" />
+                    )}
+                    <span className="tracking-wide">
+                      {isSubmitting ? 'Saving to Database...' : 'Register Account (Step 1)'}
+                    </span>
                   </button>
 
-                  <div className="text-center pt-2">
+                  <div className="text-center pt-1">
                     <p className="text-xs text-stone-600 dark:text-stone-400">
                       Already have an account?{' '}
                       <button
                         type="button"
-                        onClick={() => setAuthMode('LOGIN')}
-                        className="font-bold text-teal-800 dark:text-teal-400 hover:underline"
+                        onClick={() => {
+                          setAuthMode('LOGIN');
+                          setErrorMsg(null);
+                          setSuccessMsg(null);
+                        }}
+                        className="font-bold text-teal-700 dark:text-teal-400 hover:underline"
                       >
                         Log In
                       </button>
@@ -778,15 +1033,15 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           {selectedSpace === 'CAREGIVER' && (
             <>
               {authMode === 'LOGIN' ? (
-                /* Caregiver Login Form */
-                <form onSubmit={handleCaregiverLogin} className="space-y-5">
-                  <div className="space-y-4">
-                    <div>
-                      <label htmlFor="caregiver-login-input" className="text-xs font-bold text-stone-700 dark:text-stone-300 block mb-1">
-                        Caregiver Username, Email, or Mobile:
+                /* Caregiver Login Form (Mobile Number & Password) */
+                <form onSubmit={handleCaregiverLogin} className="space-y-4">
+                  <div className="space-y-3.5">
+                    <div className="space-y-1">
+                      <label htmlFor="caregiver-login-input" className="text-xs font-bold text-stone-700 dark:text-stone-300 block">
+                        Caregiver Mobile Number or Username <span className="text-rose-500">*</span>:
                       </label>
                       <div className="relative">
-                        <User className="w-4 h-4 text-stone-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                        <Phone className="w-4 h-4 text-stone-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                         <input
                           id="caregiver-login-input"
                           type="text"
@@ -796,15 +1051,15 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                             setCaregiverLoginInput(e.target.value);
                             if (errorMsg) setErrorMsg(null);
                           }}
-                          placeholder="e.g. priya or priya.care@cognitivesaathi.org"
-                          className="w-full pl-10 pr-4 py-3 rounded-2xl border border-stone-300 dark:border-stone-600 text-sm font-semibold text-stone-900 dark:text-stone-100 focus:outline-teal-800 bg-white dark:bg-[#121820]"
+                          placeholder="e.g. 9435012345 or username"
+                          className="w-full pl-10 pr-4 py-3 rounded-2xl border border-stone-300 dark:border-stone-600 text-sm font-semibold text-stone-900 dark:text-stone-100 focus:ring-2 focus:ring-teal-600 focus:outline-none bg-white dark:bg-[#121820]"
                         />
                       </div>
                     </div>
 
-                    <div>
-                      <label htmlFor="caregiver-pin-input" className="text-xs font-bold text-stone-700 dark:text-stone-300 block mb-1">
-                        Security PIN or Password:
+                    <div className="space-y-1">
+                      <label htmlFor="caregiver-pin-input" className="text-xs font-bold text-stone-700 dark:text-stone-300 block">
+                        Caregiver Password <span className="text-rose-500">*</span>:
                       </label>
                       <div className="relative">
                         <Lock className="w-4 h-4 text-stone-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
@@ -817,14 +1072,13 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                             setCaregiverPin(e.target.value);
                             if (errorMsg) setErrorMsg(null);
                           }}
-                          placeholder="Enter your personal security PIN"
-                          className="w-full pl-10 pr-11 py-3 rounded-2xl border border-stone-300 dark:border-stone-600 text-sm font-semibold tracking-widest text-stone-900 dark:text-stone-100 focus:outline-teal-800 bg-white dark:bg-[#121820]"
+                          placeholder="Enter your caregiver password"
+                          className="w-full pl-10 pr-11 py-3 rounded-2xl border border-stone-300 dark:border-stone-600 text-sm font-semibold tracking-wide text-stone-900 dark:text-stone-100 focus:ring-2 focus:ring-teal-600 focus:outline-none bg-white dark:bg-[#121820]"
                         />
                         <button
                           type="button"
                           onClick={() => setShowCaregiverPin(!showCaregiverPin)}
                           className="absolute right-3.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 p-1"
-                          aria-label="Toggle password visibility"
                         >
                           {showCaregiverPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                         </button>
@@ -832,51 +1086,69 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                     </div>
                   </div>
 
+                  {/* Primary Caregiver Submit Button */}
                   <button
                     type="submit"
-                    className="w-full flex items-center justify-center gap-2 py-4 px-6 rounded-2xl bg-teal-800 hover:bg-teal-900 text-white font-bold text-sm shadow-xs transition active:scale-98"
+                    disabled={isSubmitting}
+                    id="enter-caregiver-space-btn"
+                    className="w-full flex items-center justify-center gap-2.5 py-4 px-6 rounded-2xl bg-teal-700 hover:bg-teal-800 active:bg-teal-900 text-white font-extrabold text-base shadow-md hover:shadow-lg transition-all active:scale-[0.99] disabled:opacity-60 cursor-pointer"
                   >
-                    <ShieldCheck className="w-4 h-4 text-amber-300" />
-                    <span>Enter Caregiver Space</span>
-                    <ArrowRight className="w-4 h-4 ml-1" />
+                    {isSubmitting ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <ShieldCheck className="w-5 h-5 text-amber-300 shrink-0" />
+                    )}
+                    <span className="tracking-wide">
+                      {isSubmitting ? 'Authenticating Caregiver...' : 'Log In to Caregiver Space'}
+                    </span>
+                    <ArrowRight className="w-5 h-5 ml-1 shrink-0" />
                   </button>
 
-                  <div className="text-center pt-2">
+                  <div className="text-center pt-1">
                     <p className="text-xs text-stone-600 dark:text-stone-400">
-                      Don't have a caregiver account?{' '}
+                      Need a caregiver account?{' '}
                       <button
                         type="button"
-                        onClick={() => setAuthMode('REGISTER')}
-                        className="font-bold text-teal-800 dark:text-teal-400 hover:underline"
+                        onClick={() => {
+                          setAuthMode('REGISTER');
+                          setErrorMsg(null);
+                          setSuccessMsg(null);
+                        }}
+                        className="font-bold text-teal-700 dark:text-teal-400 hover:underline"
                       >
-                        Create account
+                        Register here
                       </button>
                     </p>
                   </div>
                 </form>
               ) : (
-                /* Caregiver Register Form */
-                <form onSubmit={handleCaregiverRegister} className="space-y-5">
-                  <div className="space-y-4">
-                    <div>
-                      <label htmlFor="reg-cg-name" className="text-xs font-bold text-stone-700 dark:text-stone-300 block mb-1">
-                        Caregiver Full Name *
-                      </label>
-                      <input
-                        id="reg-cg-name"
-                        type="text"
-                        required
-                        value={regCaregiverName}
-                        onChange={(e) => setRegCaregiverName(e.target.value)}
-                        placeholder="e.g. Debashree Gogoi"
-                        className="w-full px-4 py-3 rounded-2xl border border-stone-300 dark:border-stone-600 text-sm font-semibold text-stone-900 dark:text-stone-100 focus:outline-teal-800 bg-stone-50/50 dark:bg-[#121820]"
-                      />
-                    </div>
+                /* Caregiver Register Form (MANDATORY FIELDS, REGISTER -> LOGIN -> APP) */
+                <form onSubmit={handleCaregiverRegister} className="space-y-4">
+                  <div className="p-3 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded-xl text-xs text-amber-900 dark:text-amber-200 flex items-center gap-2">
+                    <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
+                    <span>All fields marked with <strong className="text-rose-600">*</strong> are mandatory. After registration, please log in with your number & password.</span>
+                  </div>
 
+                  <div className="space-y-3">
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
+                        <label htmlFor="reg-cg-name" className="text-xs font-bold text-stone-700 dark:text-stone-300 block mb-1">
+                          Caregiver Full Name <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          id="reg-cg-name"
+                          type="text"
+                          required
+                          value={regCaregiverName}
+                          onChange={(e) => setRegCaregiverName(e.target.value)}
+                          placeholder="e.g. Debashree Gogoi"
+                          className="w-full px-4 py-2.5 rounded-2xl border border-stone-300 dark:border-stone-600 text-sm font-semibold text-stone-900 dark:text-stone-100 focus:ring-2 focus:ring-teal-600 focus:outline-none bg-stone-50/50 dark:bg-[#121820]"
+                        />
+                      </div>
+
+                      <div>
                         <label htmlFor="reg-cg-user" className="text-xs font-bold text-stone-700 dark:text-stone-300 block mb-1">
-                          Username *
+                          Unique Username <span className="text-rose-500">*</span>
                         </label>
                         <input
                           id="reg-cg-user"
@@ -885,19 +1157,38 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                           value={regCaregiverUsername}
                           onChange={(e) => setRegCaregiverUsername(e.target.value.toLowerCase().replace(/\s+/g, ''))}
                           placeholder="e.g. debashree"
-                          className="w-full px-4 py-3 rounded-2xl border border-stone-300 dark:border-stone-600 text-sm font-semibold text-stone-900 dark:text-stone-100 focus:outline-teal-800 bg-stone-50/50 dark:bg-[#121820]"
+                          className="w-full px-4 py-2.5 rounded-2xl border border-stone-300 dark:border-stone-600 text-sm font-semibold text-stone-900 dark:text-stone-100 focus:ring-2 focus:ring-teal-600 focus:outline-none bg-stone-50/50 dark:bg-[#121820]"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <label htmlFor="reg-cg-phone" className="text-xs font-bold text-stone-700 dark:text-stone-300 block mb-1">
+                          Mobile Number (10 Digits) <span className="text-rose-500">*</span>
+                        </label>
+                        <input
+                          id="reg-cg-phone"
+                          type="tel"
+                          required
+                          maxLength={10}
+                          value={regCaregiverPhone}
+                          onChange={(e) => setRegCaregiverPhone(e.target.value.replace(/\D/g, ''))}
+                          placeholder="e.g. 9435012345"
+                          className="w-full px-4 py-2.5 rounded-2xl border border-stone-300 dark:border-stone-600 text-sm font-semibold text-stone-900 dark:text-stone-100 focus:ring-2 focus:ring-teal-600 focus:outline-none bg-stone-50/50 dark:bg-[#121820]"
                         />
                       </div>
 
                       <div>
                         <label htmlFor="reg-cg-rel" className="text-xs font-bold text-stone-700 dark:text-stone-300 block mb-1">
-                          Relationship
+                          Relationship to Patient <span className="text-rose-500">*</span>
                         </label>
                         <select
                           id="reg-cg-rel"
+                          required
                           value={regCaregiverRelation}
                           onChange={(e) => setRegCaregiverRelation(e.target.value)}
-                          className="w-full px-4 py-3 rounded-2xl border border-stone-300 dark:border-stone-600 text-sm font-semibold text-stone-900 dark:text-stone-100 focus:outline-teal-800 bg-stone-50/50 dark:bg-[#121820]"
+                          className="w-full px-4 py-2.5 rounded-2xl border border-stone-300 dark:border-stone-600 text-sm font-semibold text-stone-900 dark:text-stone-100 focus:ring-2 focus:ring-teal-600 focus:outline-none bg-stone-50/50 dark:bg-[#121820]"
                         >
                           <option value="Daughter">Daughter</option>
                           <option value="Son">Son</option>
@@ -911,84 +1202,88 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                       <div>
-                        <label htmlFor="reg-cg-phone" className="text-xs font-bold text-stone-700 dark:text-stone-300 block mb-1">
-                          Phone Number *
+                        <label htmlFor="reg-cg-pin" className="text-xs font-bold text-stone-700 dark:text-stone-300 block mb-1">
+                          Create Password <span className="text-rose-500">*</span>
                         </label>
-                        <input
-                          id="reg-cg-phone"
-                          type="tel"
-                          required
-                          value={regCaregiverPhone}
-                          onChange={(e) => setRegCaregiverPhone(e.target.value)}
-                          placeholder="e.g. +91 94350 12345"
-                          className="w-full px-4 py-3 rounded-2xl border border-stone-300 dark:border-stone-600 text-sm font-semibold text-stone-900 dark:text-stone-100 focus:outline-teal-800 bg-stone-50/50 dark:bg-[#121820]"
-                        />
+                        <div className="relative">
+                          <Lock className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                          <input
+                            id="reg-cg-pin"
+                            type="password"
+                            required
+                            minLength={4}
+                            value={regCaregiverPin}
+                            onChange={(e) => setRegCaregiverPin(e.target.value)}
+                            placeholder="Min 4 characters"
+                            className="w-full pl-9 pr-3 py-2.5 rounded-2xl border border-stone-300 dark:border-stone-600 text-sm font-semibold tracking-wide text-stone-900 dark:text-stone-100 focus:ring-2 focus:ring-teal-600 focus:outline-none bg-white dark:bg-[#121820]"
+                          />
+                        </div>
                       </div>
 
                       <div>
-                        <label htmlFor="reg-cg-email" className="text-xs font-bold text-stone-700 dark:text-stone-300 block mb-1">
-                          Email (Optional)
+                        <label htmlFor="reg-cg-confirm-pin" className="text-xs font-bold text-stone-700 dark:text-stone-300 block mb-1">
+                          Confirm Password <span className="text-rose-500">*</span>
                         </label>
-                        <input
-                          id="reg-cg-email"
-                          type="email"
-                          value={regCaregiverEmail}
-                          onChange={(e) => setRegCaregiverEmail(e.target.value)}
-                          placeholder="e.g. debashree@care.in"
-                          className="w-full px-4 py-3 rounded-2xl border border-stone-300 dark:border-stone-600 text-sm font-semibold text-stone-900 dark:text-stone-100 focus:outline-teal-800 bg-stone-50/50 dark:bg-[#121820]"
-                        />
+                        <div className="relative">
+                          <Lock className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                          <input
+                            id="reg-cg-confirm-pin"
+                            type="password"
+                            required
+                            minLength={4}
+                            value={regCaregiverConfirmPin}
+                            onChange={(e) => setRegCaregiverConfirmPin(e.target.value)}
+                            placeholder="Re-type password"
+                            className="w-full pl-9 pr-3 py-2.5 rounded-2xl border border-stone-300 dark:border-stone-600 text-sm font-semibold tracking-wide text-stone-900 dark:text-stone-100 focus:ring-2 focus:ring-teal-600 focus:outline-none bg-white dark:bg-[#121820]"
+                          />
+                        </div>
                       </div>
                     </div>
 
-                    <div>
-                      <label htmlFor="reg-cg-pin" className="text-xs font-bold text-stone-700 dark:text-stone-300 block mb-1">
-                        Create PIN or Password *
-                      </label>
-                      <input
-                        id="reg-cg-pin"
-                        type="password"
-                        required
-                        value={regCaregiverPin}
-                        onChange={(e) => setRegCaregiverPin(e.target.value)}
-                        placeholder="Create a personal security PIN or password"
-                        className="w-full px-4 py-3 rounded-2xl border border-stone-300 dark:border-stone-600 text-sm font-semibold tracking-widest text-stone-900 dark:text-stone-100 focus:outline-teal-800 bg-white dark:bg-[#121820]"
-                      />
-                    </div>
-
                     {/* Caregiver Key Linking Field */}
-                    <div className="p-3.5 rounded-2xl bg-teal-50/70 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 space-y-1.5">
+                    <div className="p-3.5 rounded-2xl bg-teal-50/70 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 space-y-1">
                       <label htmlFor="reg-cg-key" className="text-xs font-bold text-teal-900 dark:text-teal-200 block">
                         Link Patient with Caregiver Key (Optional)
                       </label>
-                      <p className="text-[11px] text-teal-800/80 dark:text-teal-300/80 leading-relaxed">
-                        If a family member gave you a Caregiver Key (e.g. CG-CARE88), enter it here to link automatically:
-                      </p>
                       <input
                         id="reg-cg-key"
                         type="text"
                         value={regCaregiverKey}
                         onChange={(e) => setRegCaregiverKey(e.target.value.toUpperCase())}
                         placeholder="e.g. CG-CARE88"
-                        className="w-full px-3.5 py-2.5 rounded-xl border border-teal-300 dark:border-teal-700 text-xs font-mono font-bold tracking-wider text-teal-950 dark:text-teal-100 uppercase bg-white dark:bg-[#121820]"
+                        className="w-full px-3.5 py-2 rounded-xl border border-teal-300 dark:border-teal-700 text-xs font-mono font-bold tracking-wider text-teal-950 dark:text-teal-100 uppercase bg-white dark:bg-[#121820]"
                       />
                     </div>
                   </div>
 
+                  {/* Caregiver Register Submit Button */}
                   <button
                     type="submit"
-                    className="w-full flex items-center justify-center gap-2 py-4 px-6 rounded-2xl bg-teal-800 hover:bg-teal-900 text-white font-bold text-sm shadow-xs transition active:scale-98"
+                    disabled={isSubmitting}
+                    id="register-caregiver-btn"
+                    className="w-full flex items-center justify-center gap-2.5 py-4 px-6 rounded-2xl bg-teal-700 hover:bg-teal-800 active:bg-teal-900 text-white font-extrabold text-base shadow-md hover:shadow-lg transition-all active:scale-[0.99] disabled:opacity-60 cursor-pointer"
                   >
-                    <ShieldCheck className="w-4 h-4 text-amber-300" />
-                    <span>Create Account & Enter Caregiver Space</span>
+                    {isSubmitting ? (
+                      <Loader2 className="w-5 h-5 animate-spin" />
+                    ) : (
+                      <ShieldCheck className="w-5 h-5 text-amber-300 shrink-0" />
+                    )}
+                    <span className="tracking-wide">
+                      {isSubmitting ? 'Saving to Database...' : 'Register Caregiver Account (Step 1)'}
+                    </span>
                   </button>
 
-                  <div className="text-center pt-2">
+                  <div className="text-center pt-1">
                     <p className="text-xs text-stone-600 dark:text-stone-400">
                       Already have an account?{' '}
                       <button
                         type="button"
-                        onClick={() => setAuthMode('LOGIN')}
-                        className="font-bold text-teal-800 dark:text-teal-400 hover:underline"
+                        onClick={() => {
+                          setAuthMode('LOGIN');
+                          setErrorMsg(null);
+                          setSuccessMsg(null);
+                        }}
+                        className="font-bold text-teal-700 dark:text-teal-400 hover:underline"
                       >
                         Log In
                       </button>
@@ -1009,9 +1304,16 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         onSuccess={(msg) => setSuccessMsg(msg)}
       />
 
+      {/* Voice Pack & Clarity Modal */}
+      <VoicePackModal
+        isOpen={isVoiceModalOpen}
+        onClose={() => setIsVoiceModalOpen(false)}
+        lang={lang}
+      />
+
       {/* Footer */}
-      <footer className="max-w-4xl w-full mx-auto text-center py-4 border-t border-stone-200/80 dark:border-stone-800 text-xs text-stone-500 dark:text-stone-400">
-        CognitiveSaathi • Gentle Eldercare, Daily Routines & Family Connection
+      <footer className="max-w-4xl w-full mx-auto text-center py-3 border-t border-stone-200/80 dark:border-stone-800 text-xs text-stone-500 dark:text-stone-400">
+        CognitiveSaathi • Memory Care, Daily Routines & Secure Database Access
       </footer>
     </div>
   );

@@ -1,5 +1,5 @@
 import React from 'react';
-import { Mic, User, ShieldCheck, HeartPulse, Type, LogOut, Lock, Heart, Sun, Moon } from 'lucide-react';
+import { Mic, User, ShieldCheck, HeartPulse, Type, LogOut, Lock, Heart, Sun, Moon, Volume2 } from 'lucide-react';
 import { UserRole, LanguageCode, ConnectivityStatus, TextScale } from '../../types';
 import { translations } from '../../lib/i18n';
 import { ConnectivityBadge } from '../common/ConnectivityBadge';
@@ -14,6 +14,7 @@ interface HeaderProps {
   connectivity: ConnectivityStatus;
   onSyncTrigger: () => void;
   onOpenVoice: () => void;
+  onOpenVoicePack?: () => void;
   textScale: TextScale;
   onTextScaleChange: (scale: TextScale) => void;
   patientName?: string;
@@ -33,6 +34,7 @@ export const Header: React.FC<HeaderProps> = ({
   connectivity,
   onSyncTrigger,
   onOpenVoice,
+  onOpenVoicePack,
   textScale,
   onTextScaleChange,
   patientName = 'Ramesh Sharma',
@@ -96,6 +98,18 @@ export const Header: React.FC<HeaderProps> = ({
             <Mic className="w-4 h-4 text-stone-900" />
             <span className="font-semibold hidden sm:inline">Voice</span>
           </button>
+
+          {/* Voice Pack & Clarity Button */}
+          {onOpenVoicePack && (
+            <button
+              onClick={onOpenVoicePack}
+              className="p-2 rounded-full text-stone-600 dark:text-stone-300 hover:bg-stone-200/80 dark:hover:bg-stone-800 transition"
+              title="Voice Clarity & Sound Packs"
+              aria-label="Download Voice Pack"
+            >
+              <Volume2 className="w-4 h-4 text-teal-700 dark:text-teal-400" />
+            </button>
+          )}
 
           {/* Dark / Light Theme Toggle */}
           {onToggleTheme && (

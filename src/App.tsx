@@ -48,6 +48,7 @@ import {
 } from './lib/offlineStore';
 import { Header } from './components/layout/Header';
 import { VoiceAssistantModal } from './components/voice/VoiceAssistantModal';
+import { VoicePackModal } from './components/voice/VoicePackModal';
 import { LoginScreen } from './components/auth/LoginScreen';
 import { PatientHome } from './components/patient/PatientHome';
 import { PatientActivities } from './components/patient/PatientActivities';
@@ -131,6 +132,7 @@ export default function App() {
   const [highContrast, setHighContrast] = useState<boolean>(false);
   const [voiceEnabled, setVoiceEnabled] = useState<boolean>(true);
   const [isVoiceModalOpen, setIsVoiceModalOpen] = useState<boolean>(false);
+  const [isVoicePackModalOpen, setIsVoicePackModalOpen] = useState<boolean>(false);
   const [isAiCompanionOpen, setIsAiCompanionOpen] = useState<boolean>(false);
 
   // Connectivity & Synchronization
@@ -406,6 +408,8 @@ export default function App() {
   if (!isLoggedIn) {
     return (
       <LoginScreen
+        theme={theme}
+        onToggleTheme={toggleTheme}
         onLoginPatient={(loggedInPatient) => {
           setPatient(loggedInPatient);
           setAllPatients(OfflineStore.getPatients());
@@ -463,6 +467,7 @@ export default function App() {
         connectivity={connectivity}
         onSyncTrigger={handleTriggerSync}
         onOpenVoice={() => setIsVoiceModalOpen(true)}
+        onOpenVoicePack={() => setIsVoicePackModalOpen(true)}
         textScale={textScale}
         onTextScaleChange={setTextScale}
         patientName={patient.fullName}
@@ -854,6 +859,13 @@ export default function App() {
             setPatientTab(tab as any);
           }
         }}
+      />
+
+      {/* Voice Clarity & Voice Pack Modal */}
+      <VoicePackModal
+        isOpen={isVoicePackModalOpen}
+        onClose={() => setIsVoicePackModalOpen(false)}
+        lang={lang}
       />
 
       {/* AI Caretaker Companion Modal (Voice & Text conversational companion) */}

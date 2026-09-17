@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+@theme {
+  --color-teal-850: #0f4c47;
+}
+
 @layer base {
   :root {
     --font-heading: 'Lora', Georgia, serif;

@@ -356,40 +356,6 @@ const STORAGE_KEYS = {
   SYNC_QUEUE: 'cognitivesaathi_v3_sync_queue',
 };
 
-// Aggressive one-time purge of ANY legacy persona data or unversioned keys in localStorage
-export function purgeLegacyPersonaData(): void {
-  try {
-    if (typeof window === 'undefined' || !window.localStorage) return;
-    const keysToRemove: string[] = [];
-    for (let i = 0; i < localStorage.length; i++) {
-      const key = localStorage.key(i);
-      if (!key) continue;
-      // If it is an old unversioned cognitivesaathi key
-      if (key.startsWith('cognitivesaathi_') && !key.startsWith('cognitivesaathi_v3_')) {
-        keysToRemove.push(key);
-      } else {
-        // Also check if any stored item contains "anima" or "aita"
-        const val = localStorage.getItem(key) || '';
-        if (val.toLowerCase().includes('anima') || val.toLowerCase().includes('aita')) {
-          keysToRemove.push(key);
-        }
-      }
-    }
-    keysToRemove.forEach((k) => {
-      try {
-        localStorage.removeItem(k);
-      } catch {}
-    });
-  } catch (e) {
-    console.warn('Storage purge warning:', e);
-  }
-}
-
-// Run immediately when module is evaluated
-if (typeof window !== 'undefined') {
-  purgeLegacyPersonaData();
-}
-
 // Helper to strip any legacy stock photos from stored data
 const stripStockAvatar = (url?: string): string => {
   if (!url) return '';
@@ -398,21 +364,9 @@ const stripStockAvatar = (url?: string): string => {
 };
 
 const sanitizePatient = (p: PatientProfile): PatientProfile => {
-  const isLegacy =
-    p.fullName.toLowerCase().includes('anima') ||
-    p.fullName.toLowerCase().includes('aita') ||
-    (p.username && p.username.toLowerCase().includes('anima'));
-
-  const cleanProfile: PatientProfile = isLegacy
-    ? {
-        ...DEFAULT_PATIENTS[0],
-        id: p.id || DEFAULT_PATIENTS[0].id,
-      }
-    : p;
-
   return {
-    ...cleanProfile,
-    avatarUrl: stripStockAvatar(cleanProfile.avatarUrl),
+    ...p,
+    avatarUrl: stripStockAvatar(p.avatarUrl),
   };
 };
 
@@ -481,15 +435,8 @@ export class OfflineStore {
       const data = localStorage.getItem(STORAGE_KEYS.SESSION);
       if (!data) return null;
       const session: AuthSession = JSON.parse(data);
+      // Valid persistent session
       if (session.expiresAt && Date.now() > session.expiresAt) {
-        this.clearAuthSession();
-        return null;
-      }
-      // Auto-clear any legacy persona session
-      if (
-        (session.userName && (session.userName.toLowerCase().includes('anima') || session.userName.toLowerCase().includes('aita'))) ||
-        (session.patientId && (session.patientId.toLowerCase().includes('anima') || session.patientId.toLowerCase().includes('aita')))
-      ) {
         this.clearAuthSession();
         return null;
       }
@@ -501,7 +448,12 @@ export class OfflineStore {
 
   static saveAuthSession(session: AuthSession): void {
     try {
-      localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(session));
+      // Keep session persistent across reloads (default 365 days if not set)
+      const persistentSession: AuthSession = {
+        ...session,
+        expiresAt: session.expiresAt || Date.now() + 365 * 24 * 60 * 60 * 1000,
+      };
+      localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(persistentSession));
     } catch (e) {
       console.warn('Session save error:', e);
     }
@@ -520,19 +472,10 @@ export class OfflineStore {
       const data = localStorage.getItem(STORAGE_KEYS.PATIENTS_LIST);
       if (data) {
         const list: PatientProfile[] = JSON.parse(data);
-        const filtered = list
-          .filter(
-            (p) =>
-              !p.fullName.toLowerCase().includes('anima') &&
-              !p.fullName.toLowerCase().includes('aita') &&
-              (!p.username || !p.username.toLowerCase().includes('anima'))
-          )
-          .map(sanitizePatient);
-        if (filtered.length > 0) {
-          return filtered;
+        if (Array.isArray(list) && list.length > 0) {
+          return list.map(sanitizePatient);
         }
       }
-      // Return clean default patients so app has ready-to-use profiles
       return DEFAULT_PATIENTS.map(sanitizePatient);
     } catch {
       return DEFAULT_PATIENTS.map(sanitizePatient);
@@ -657,6 +600,49 @@ export class OfflineStore {
       localStorage.setItem(STORAGE_KEYS.CARETAKERS_LIST, JSON.stringify(caretakers));
     } catch (e) {
       console.warn('Local storage error:', e);
+    }
+  }
+
+  static async syncWithServer(): Promise<void> {
+    try {
+      const [patientsRes, caretakersRes] = await Promise.all([
+        fetch('/api/patients'),
+        fetch('/api/caretakers'),
+      ]);
+      if (patientsRes.ok) {
+        const patients = await patientsRes.json();
+        if (Array.isArray(patients) && patients.length > 0) {
+          const current = this.getPatients();
+          const merged = [...current];
+          for (const p of patients) {
+            const idx = merged.findIndex((m) => m.id === p.id || (m.phone && m.phone === p.phone));
+            if (idx >= 0) {
+              merged[idx] = { ...merged[idx], ...p };
+            } else {
+              merged.push(p);
+            }
+          }
+          this.savePatients(merged);
+        }
+      }
+      if (caretakersRes.ok) {
+        const caretakers = await caretakersRes.json();
+        if (Array.isArray(caretakers) && caretakers.length > 0) {
+          const current = this.getCaretakers();
+          const merged = [...current];
+          for (const c of caretakers) {
+            const idx = merged.findIndex((m) => m.id === c.id || (m.phone && m.phone === c.phone));
+            if (idx >= 0) {
+              merged[idx] = { ...merged[idx], ...c };
+            } else {
+              merged.push(c);
+            }
+          }
+          this.saveCaretakers(merged);
+        }
+      }
+    } catch (e) {
+      // Offline fallback: keep local data
     }
   }
 

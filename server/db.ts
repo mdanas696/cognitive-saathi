@@ -336,17 +336,67 @@ export class ServerDB {
   }
 
   static unlinkCaregiver(
-    patientId: string
-  ): { success: boolean; patient?: PatientProfile } {
+    patientId: string,
+    initiator: 'CAREGIVER' | 'PATIENT' = 'CAREGIVER',
+    initiatorName?: string,
+    initiatorId?: string
+  ): { success: boolean; patient?: PatientProfile; affectedCaretakers?: CaretakerProfile[] } {
     const db = this.ensureDbExists();
     const patient = this.findPatient(patientId) || db.patients.find((p) => p.id === patientId);
     if (!patient) return { success: false };
+
+    // Find the caretaker(s) previously linked to this patient
+    const previousCaregiverKey = (patient.linkedCaregiverKey || '').trim().toUpperCase();
+    const previousCaretakers = db.caretakers.filter(
+      (c) =>
+        (initiatorId && c.id === initiatorId) ||
+        (c.assignedPatientIds && c.assignedPatientIds.includes(patient.id)) ||
+        (previousCaregiverKey && (c.caregiverKey || '').trim().toUpperCase() === previousCaregiverKey)
+    );
+
+    const caregiverName = initiatorName || (previousCaretakers.length > 0 ? previousCaretakers[0].fullName : patient.caregiverName || 'Caregiver');
 
     patient.linkedCaregiverKey = '';
     patient.hasCaregiver = false;
     patient.caregiverName = 'Self';
     patient.caregiverPhone = '';
 
+    // If caregiver deleted/removed the patient:
+    // The patient gets an update/notice inside "Me" that caregiver removed them
+    if (initiator === 'CAREGIVER') {
+      patient.caregiverRemovalNotice = {
+        caregiverName: caregiverName !== 'Self' ? caregiverName : 'Your Caregiver',
+        caregiverPhone: previousCaretakers[0]?.phone || '',
+        caregiverKey: previousCaretakers[0]?.caregiverKey || previousCaregiverKey,
+        removedAt: new Date().toISOString(),
+        message: `Your caregiver ${caregiverName !== 'Self' ? caregiverName : ''} has removed you from their care circle. You are now in self-care mode.`,
+      };
+    }
+
+    // If patient removed the caregiver:
+    // The caregiver gets a message inside "Me" that patient removed them
+    if (initiator === 'PATIENT') {
+      const notice = {
+        id: `notice-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        patientId: patient.id,
+        patientName: patient.fullName,
+        patientKey: patient.patientKey || `PT-${patient.id.slice(0, 6).toUpperCase()}`,
+        removedAt: new Date().toISOString(),
+        message: `Patient ${patient.fullName} has unlinked / removed you as their caregiver.`,
+      };
+
+      for (const ct of previousCaretakers) {
+        if (!ct.patientRemovalNotices) ct.patientRemovalNotices = [];
+        const hasRecent = ct.patientRemovalNotices.some(
+          (n) => n.patientId === patient.id && Math.abs(Date.now() - new Date(n.removedAt).getTime()) < 60000
+        );
+        if (!hasRecent) {
+          ct.patientRemovalNotices.unshift(notice);
+        }
+      }
+    }
+
+    // In all cases, unassign from all caretakers
     for (const ct of db.caretakers) {
       if (ct.assignedPatientIds) {
         ct.assignedPatientIds = ct.assignedPatientIds.filter((id) => id !== patient.id);
@@ -354,7 +404,58 @@ export class ServerDB {
     }
 
     this.save(db);
-    return { success: true, patient };
+    return { success: true, patient, affectedCaretakers: previousCaretakers };
+  }
+
+  static deletePatient(
+    patientId: string,
+    initiatorCaretakerId?: string,
+    initiatorName?: string
+  ): { success: boolean; patients: PatientProfile[] } {
+    const db = this.ensureDbExists();
+    const patient = db.patients.find((p) => p.id === patientId);
+    if (patient) {
+      patient.linkedCaregiverKey = '';
+      patient.hasCaregiver = false;
+      patient.caregiverName = 'Self';
+      patient.caregiverPhone = '';
+      patient.caregiverRemovalNotice = {
+        caregiverName: initiatorName || 'Your Caregiver',
+        removedAt: new Date().toISOString(),
+        message: `Your caregiver ${initiatorName ? initiatorName + ' ' : ''}has removed you from their care circle. You are now in self-care mode.`,
+      };
+    }
+
+    for (const ct of db.caretakers) {
+      if (ct.assignedPatientIds) {
+        ct.assignedPatientIds = ct.assignedPatientIds.filter((id) => id !== patientId);
+      }
+    }
+
+    this.save(db);
+    return { success: true, patients: db.patients };
+  }
+
+  static dismissCaregiverRemovalNotice(patientId: string): boolean {
+    const db = this.ensureDbExists();
+    const patient = db.patients.find((p) => p.id === patientId);
+    if (!patient) return false;
+    delete patient.caregiverRemovalNotice;
+    this.save(db);
+    return true;
+  }
+
+  static dismissPatientRemovalNotice(caretakerId: string, noticeId?: string): boolean {
+    const db = this.ensureDbExists();
+    const caretaker = db.caretakers.find((c) => c.id === caretakerId);
+    if (!caretaker) return false;
+    if (noticeId) {
+      caretaker.patientRemovalNotices = (caretaker.patientRemovalNotices || []).filter((n) => n.id !== noticeId);
+    } else {
+      caretaker.patientRemovalNotices = [];
+    }
+    this.save(db);
+    return true;
   }
 
   static getRoutines(patientId: string): RoutineTask[] {

@@ -32,6 +32,7 @@ export const SelectOrAddCaregiverModal: React.FC<SelectOrAddCaregiverModalProps>
 
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
 
   if (!isOpen) return null;
 
@@ -126,12 +127,12 @@ export const SelectOrAddCaregiverModal: React.FC<SelectOrAddCaregiverModalProps>
   };
 
   const handleSetSelfCare = () => {
-    OfflineStore.unlinkCaregiver(patient.id);
+    OfflineStore.unlinkCaregiver(patient.id, 'PATIENT', patient.fullName);
     const updatedPatient: PatientProfile = {
       ...patient,
-      caregiverName: '',
-      caregiverPhone: patient.phone || '',
-      linkedCaregiverKey: undefined,
+      caregiverName: 'Self',
+      caregiverPhone: '',
+      linkedCaregiverKey: '',
       hasCaregiver: false,
     };
     OfflineStore.savePatient(updatedPatient);

@@ -97,6 +97,23 @@ export interface MemoryMoment {
   };
 }
 
+export interface CaregiverRemovalNotice {
+  caregiverName: string;
+  caregiverPhone?: string;
+  caregiverKey?: string;
+  removedAt: string;
+  message: string;
+}
+
+export interface PatientRemovalNotice {
+  id: string;
+  patientId: string;
+  patientName: string;
+  patientKey?: string;
+  removedAt: string;
+  message: string;
+}
+
 export interface PatientProfile {
   id: string;
   fullName: string;
@@ -120,6 +137,7 @@ export interface PatientProfile {
   dailyStreak: number;
   todayCompletedCount: number;
   phone?: string;
+  caregiverRemovalNotice?: CaregiverRemovalNotice;
 }
 
 export interface CaretakerProfile {
@@ -134,6 +152,7 @@ export interface CaretakerProfile {
   relation: string;
   avatarUrl?: string;
   assignedPatientIds: string[];
+  patientRemovalNotices?: PatientRemovalNotice[];
 }
 
 export type LanguagePackValidationStatus = 'draft' | 'reviewed' | 'approved';

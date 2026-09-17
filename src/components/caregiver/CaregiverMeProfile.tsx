@@ -169,8 +169,27 @@ export const CaregiverMeProfile: React.FC<CaregiverMeProfileProps> = ({
     setTimeout(() => setProfileSaveSuccess(null), 3000);
   };
 
+  const handleDismissPatientNotice = (noticeId: string) => {
+    if (!caretaker) return;
+    OfflineStore.dismissPatientRemovalNotice(caretaker.id, noticeId);
+    const updatedCaretaker: CaretakerProfile = {
+      ...caretaker,
+      patientRemovalNotices: (caretaker.patientRemovalNotices || []).filter((n) => n.id !== noticeId),
+    };
+    onUpdateCaretaker(updatedCaretaker);
+  };
+
   const handleConfirmUnlink = (patientId: string) => {
-    OfflineStore.unlinkCaregiver(patientId);
+    if (caretaker) {
+      OfflineStore.unlinkCaregiver(patientId, 'CAREGIVER', caretaker.fullName, caretaker.id);
+      const updatedCaretaker: CaretakerProfile = {
+        ...caretaker,
+        assignedPatientIds: (caretaker.assignedPatientIds || []).filter((id) => id !== patientId),
+      };
+      onUpdateCaretaker(updatedCaretaker);
+    } else {
+      OfflineStore.unlinkCaregiver(patientId, 'CAREGIVER');
+    }
     if (onUnlinkPatient) {
       onUnlinkPatient(patientId);
     }
@@ -179,6 +198,47 @@ export const CaregiverMeProfile: React.FC<CaregiverMeProfileProps> = ({
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto pb-12 animate-fadeIn">
+      {/* Patient Relationship Deletion Notices in Caregiver's "Me" section */}
+      {caretaker?.patientRemovalNotices && caretaker.patientRemovalNotices.length > 0 && (
+        <div className="space-y-3">
+          {caretaker.patientRemovalNotices.map((notice) => (
+            <div
+              key={notice.id}
+              className="p-4 sm:p-5 bg-amber-50 dark:bg-amber-950/70 border-2 border-amber-300 dark:border-amber-700 rounded-3xl text-amber-950 dark:text-amber-100 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-sm"
+            >
+              <div className="flex items-start gap-3.5">
+                <div className="p-2.5 bg-amber-200 dark:bg-amber-800 text-amber-900 dark:text-amber-100 rounded-2xl shrink-0 mt-0.5 sm:mt-0">
+                  <AlertTriangle className="w-5 h-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-extrabold uppercase tracking-wide bg-amber-200/80 dark:bg-amber-900 text-amber-900 dark:text-amber-200 px-2.5 py-0.5 rounded-md">
+                      Patient Update
+                    </span>
+                    <span className="text-[11px] text-amber-700 dark:text-amber-300">
+                      {new Date(notice.removedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </span>
+                  </div>
+                  <h3 className="text-base font-bold text-amber-950 dark:text-amber-100 mt-1">
+                    {notice.message || `Patient ${notice.patientName} has removed you as their caregiver.`}
+                  </h3>
+                  <p className="text-xs text-amber-800 dark:text-amber-300 mt-0.5">
+                    This patient was unlinked and removed from your care circle. You can dismiss this alert or re-link with their Patient Key anytime.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => handleDismissPatientNotice(notice.id)}
+                className="self-end sm:self-center px-4 py-2 rounded-xl bg-amber-200 hover:bg-amber-300 dark:bg-amber-800 dark:hover:bg-amber-700 text-amber-900 dark:text-amber-100 text-xs font-bold transition flex items-center gap-1.5 shrink-0 cursor-pointer"
+              >
+                <span>Acknowledge & Dismiss</span>
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Notifications */}
       {keySuccess && (
         <div className="p-4 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-700 rounded-2xl text-emerald-900 dark:text-emerald-200 text-sm font-bold flex items-center gap-2.5 shadow-xs">

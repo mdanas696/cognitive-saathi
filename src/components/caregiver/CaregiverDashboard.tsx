@@ -420,7 +420,7 @@ export const CaregiverDashboard: React.FC<CaregiverDashboardProps> = ({
                       </span>
                     )}
 
-                    {onDeletePatient && allPatients.length > 1 && (
+                    {onDeletePatient && (
                       <button
                         type="button"
                         onClick={(e) => {
@@ -459,10 +459,10 @@ export const CaregiverDashboard: React.FC<CaregiverDashboardProps> = ({
                     </div>
                     <div>
                       <span className="text-[10px] font-bold uppercase tracking-wider text-rose-700 dark:text-rose-400 bg-rose-50 dark:bg-rose-950/80 px-2 py-0.5 rounded-md">
-                        Delete Patient
+                        Remove Patient
                       </span>
                       <h3 className="text-base font-bold text-stone-900 dark:text-stone-100 font-serif-heading">
-                        Remove Patient Record?
+                        Remove Patient from Care Circle?
                       </h3>
                     </div>
                   </div>
@@ -476,7 +476,7 @@ export const CaregiverDashboard: React.FC<CaregiverDashboardProps> = ({
                 </div>
 
                 <p className="text-xs text-stone-600 dark:text-stone-300 leading-relaxed">
-                  Are you sure you want to remove <strong>{patientToDelete.fullName}</strong> ({patientToDelete.preferredName})? All local routines, reminders, and performance sessions for this patient will be deleted.
+                  Are you sure you want to remove <strong>{patientToDelete.fullName}</strong> ({patientToDelete.preferredName})? They will be removed from your care circle, and their profile will receive an update in their "Me" section stating you removed them.
                 </p>
 
                 <div className="flex items-center gap-2.5 pt-2">

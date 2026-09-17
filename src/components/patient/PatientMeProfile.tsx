@@ -113,12 +113,21 @@ export const PatientMeProfile: React.FC<PatientMeProfileProps> = ({
     }
   };
 
+  const handleDismissCaregiverNotice = () => {
+    OfflineStore.dismissCaregiverRemovalNotice(patient.id);
+    const updated = { ...patient };
+    delete updated.caregiverRemovalNotice;
+    onUpdatePatient(updated);
+  };
+
   const handleUnlinkCaregiver = () => {
+    OfflineStore.unlinkCaregiver(patient.id, 'PATIENT', patient.fullName);
     const updated = {
       ...patient,
       caregiverName: 'Self',
       caregiverPhone: '',
       hasCaregiver: false,
+      linkedCaregiverKey: '',
     };
     onUpdatePatient(updated);
   };
@@ -131,6 +140,49 @@ export const PatientMeProfile: React.FC<PatientMeProfileProps> = ({
 
   return (
     <div className="max-w-3xl mx-auto space-y-7 pb-10 animate-fadeIn">
+      {/* Caregiver Removal Notice Banner in Patient's "Me" section */}
+      {patient.caregiverRemovalNotice && (
+        <div className="p-5 bg-amber-50 dark:bg-amber-950/70 border-2 border-amber-300 dark:border-amber-700 rounded-3xl text-amber-950 dark:text-amber-100 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 animate-fadeIn">
+          <div className="flex items-start gap-3.5">
+            <div className="p-2.5 bg-amber-200 dark:bg-amber-800 text-amber-900 dark:text-amber-100 rounded-2xl shrink-0 mt-0.5 sm:mt-0">
+              <AlertTriangle className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="text-xs font-extrabold uppercase tracking-wide bg-amber-200/80 dark:bg-amber-900 text-amber-900 dark:text-amber-200 px-2.5 py-0.5 rounded-md">
+                  Care Circle Update
+                </span>
+                <span className="text-[11px] text-amber-700 dark:text-amber-300">
+                  {new Date(patient.caregiverRemovalNotice.removedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </div>
+              <h3 className="text-base font-bold text-amber-950 dark:text-amber-100 mt-1">
+                Caregiver {patient.caregiverRemovalNotice.caregiverName} has removed you from their care circle
+              </h3>
+              <p className="text-xs text-amber-800 dark:text-amber-300 mt-1 leading-relaxed">
+                Your profile has been set to Independent Self-Care. You can continue doing your activities independently or connect with another caregiver at any time.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 self-end sm:self-center shrink-0">
+            <button
+              type="button"
+              onClick={handleDismissCaregiverNotice}
+              className="px-3.5 py-2 rounded-xl bg-amber-200 hover:bg-amber-300 dark:bg-amber-800 dark:hover:bg-amber-700 text-amber-900 dark:text-amber-100 text-xs font-bold transition cursor-pointer"
+            >
+              Dismiss
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsSelectCaregiverOpen(true)}
+              className="px-3.5 py-2 rounded-xl bg-teal-800 hover:bg-teal-700 text-white text-xs font-bold transition cursor-pointer shadow-2xs"
+            >
+              + Link Caregiver
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* 1. Amma's Profile Header Card */}
       <div className="rounded-3xl bg-teal-900 text-white p-6 sm:p-8 shadow-sm">
         <div className="flex flex-col sm:flex-row items-center sm:items-start gap-5">

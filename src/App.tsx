@@ -70,7 +70,7 @@ import { HealthcareDashboard } from './components/healthcare/HealthcareDashboard
 import { AddPatientModal } from './components/caregiver/AddPatientModal';
 import { LogoutConfirmModal } from './components/common/LogoutConfirmModal';
 import { Bot, Lock } from 'lucide-react';
-import { Analytics } from '@vercel/analytics/react';
+const Analytics = () => null;
 
 export default function App() {
   // Authentication & Initial Role Selection Gate (Persistent across reloads)
@@ -279,11 +279,30 @@ export default function App() {
       });
     }
 
+    const handleSyncEvent = () => {
+      setAllPatients(OfflineStore.getPatients());
+      const allC = OfflineStore.getCaretakers();
+      if (activeCaretaker) {
+        const refreshedC = allC.find((c) => c.id === activeCaretaker.id);
+        if (refreshedC) {
+          setActiveCaretaker(refreshedC);
+        }
+      }
+      if (role === 'PATIENT' && patient.id) {
+        const refreshedP = OfflineStore.getPatient(patient.id);
+        if (refreshedP) {
+          setPatient(refreshedP);
+        }
+      }
+    };
+    window.addEventListener('cognitivesaathi_sync', handleSyncEvent);
+
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('cognitivesaathi_sync', handleSyncEvent);
     };
-  }, []);
+  }, [activeCaretaker, role, patient.id]);
 
   // Manual trigger for testing sync
   const handleTriggerSync = () => {
@@ -439,9 +458,20 @@ export default function App() {
   };
 
   const handleDeletePatient = (patientId: string) => {
-    OfflineStore.deletePatient(patientId);
+    if (role === 'PATIENT') {
+      // Patient deleted their own profile
+      OfflineStore.unlinkCaregiver(patientId, 'PATIENT', patient.fullName);
+      OfflineStore.deletePatient(patientId);
+      OfflineStore.clearAuthSession();
+      setIsLoggedIn(false);
+      return;
+    }
+
+    // Caregiver deleted/removed patient from their circle
+    OfflineStore.unlinkCaregiver(patientId, 'CAREGIVER', activeCaretaker?.fullName, activeCaretaker?.id);
+    let updatedC = activeCaretaker;
     if (activeCaretaker) {
-      const updatedC = {
+      updatedC = {
         ...activeCaretaker,
         assignedPatientIds: (activeCaretaker.assignedPatientIds || []).filter((id) => id !== patientId),
       };
@@ -452,10 +482,10 @@ export default function App() {
     setAllPatients(updated);
     const remainingForCaregiver = updated.filter(
       (p) =>
-        activeCaretaker?.assignedPatientIds?.includes(p.id) ||
+        updatedC?.assignedPatientIds?.includes(p.id) ||
         (p.linkedCaregiverKey &&
-          activeCaretaker?.caregiverKey &&
-          p.linkedCaregiverKey.toUpperCase() === activeCaretaker.caregiverKey.toUpperCase())
+          updatedC?.caregiverKey &&
+          p.linkedCaregiverKey.toUpperCase() === updatedC.caregiverKey.toUpperCase())
     );
     if (remainingForCaregiver.length > 0) {
       const nextP = remainingForCaregiver[0];
@@ -482,6 +512,7 @@ export default function App() {
         todayCompletedCount: 0,
         linkedCaregiverKey: activeCaretaker?.caregiverKey,
       });
+      OfflineStore.setActivePatientId('');
       setRoutine([]);
       setMemories([]);
       setSessions([]);
@@ -911,13 +942,7 @@ export default function App() {
                       setCaregiverTab('patient_detail');
                     }}
                     onUnlinkPatient={(pId) => {
-                      setAllPatients(OfflineStore.getPatients());
-                      if (patient.id === pId) {
-                        const remaining = caregiverPatients.filter((p) => p.id !== pId);
-                        if (remaining.length > 0) {
-                          setPatient(remaining[0]);
-                        }
-                      }
+                      handleDeletePatient(pId);
                     }}
                     lang={lang}
                     onLangChange={setLang}

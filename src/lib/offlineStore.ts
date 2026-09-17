@@ -974,25 +974,129 @@ export class OfflineStore {
     };
   }
 
-  static unlinkCaregiver(patientId: string): void {
-    const patient = this.getPatient(patientId);
-    if (!patient) return;
+  static unlinkCaregiver(
+    patientId: string,
+    initiator: 'CAREGIVER' | 'PATIENT' = 'CAREGIVER',
+    initiatorName?: string,
+    initiatorId?: string
+  ): { success: boolean; patient?: PatientProfile; caretakers?: CaretakerProfile[] } {
+    const allPatients = this.getPatients();
+    const patientIndex = allPatients.findIndex((p) => p.id === patientId);
+    if (patientIndex < 0) return { success: false };
+
+    const patient = allPatients[patientIndex];
+    const previousCaregiverKey = (patient.linkedCaregiverKey || '').trim().toUpperCase();
 
     const allCaretakers = this.getCaretakers();
-    allCaretakers.forEach((c) => {
-      c.assignedPatientIds = c.assignedPatientIds.filter((id) => id !== patientId);
-    });
-    this.saveCaretakers(allCaretakers);
+    const linkedCaretakers = allCaretakers.filter(
+      (c) =>
+        (initiatorId && c.id === initiatorId) ||
+        (c.assignedPatientIds && c.assignedPatientIds.includes(patientId)) ||
+        (previousCaregiverKey && (c.caregiverKey || '').trim().toUpperCase() === previousCaregiverKey)
+    );
 
+    const caregiverName =
+      initiatorName ||
+      (linkedCaretakers.length > 0 ? linkedCaretakers[0].fullName : patient.caregiverName || 'Caregiver');
+
+    // Remove patient from all caretakers' assignedPatientIds
+    allCaretakers.forEach((c) => {
+      c.assignedPatientIds = (c.assignedPatientIds || []).filter((id) => id !== patientId);
+    });
+
+    // Clear patient's caregiver links
     patient.hasCaregiver = false;
     patient.caregiverName = 'Self';
     patient.caregiverPhone = '';
-    patient.linkedCaregiverKey = undefined;
-    this.savePatient(patient);
+    patient.linkedCaregiverKey = '';
 
+    // If caregiver deleted / unlinked the patient:
+    // The patient gets an update / notice inside "Me" that caregiver removed them
+    if (initiator === 'CAREGIVER') {
+      patient.caregiverRemovalNotice = {
+        caregiverName: caregiverName !== 'Self' ? caregiverName : 'Your Caregiver',
+        caregiverPhone: linkedCaretakers[0]?.phone || '',
+        caregiverKey: linkedCaretakers[0]?.caregiverKey || previousCaregiverKey,
+        removedAt: new Date().toISOString(),
+        message: `Your caregiver ${caregiverName !== 'Self' ? caregiverName : ''} has removed you from their care circle. You are now in self-care mode.`,
+      };
+    }
+
+    // If patient deleted / unlinked the caregiver:
+    // The caregiver gets a message inside "Me" that patient removed them
+    if (initiator === 'PATIENT') {
+      const notice = {
+        id: `notice-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        patientId: patient.id,
+        patientName: patient.fullName,
+        patientKey: patient.patientKey || `PT-${patient.id.slice(0, 6).toUpperCase()}`,
+        removedAt: new Date().toISOString(),
+        message: `Patient ${patient.fullName} has unlinked / removed you as their caregiver.`,
+      };
+
+      linkedCaretakers.forEach((ct) => {
+        const fullCaretaker = allCaretakers.find((c) => c.id === ct.id);
+        if (fullCaretaker) {
+          if (!fullCaretaker.patientRemovalNotices) fullCaretaker.patientRemovalNotices = [];
+          const hasRecent = fullCaretaker.patientRemovalNotices.some(
+            (n) => n.patientId === patient.id && Math.abs(Date.now() - new Date(n.removedAt).getTime()) < 60000
+          );
+          if (!hasRecent) {
+            fullCaretaker.patientRemovalNotices.unshift(notice);
+          }
+        }
+      });
+    }
+
+    this.savePatients(allPatients);
+    this.saveCaretakers(allCaretakers);
+
+    // Call server endpoint
     fetch(`/api/patients/${patientId}/unlink-caregiver`, {
       method: 'POST',
-    }).catch((e) => console.warn('Unlink server error:', e));
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ initiator, initiatorName, initiatorId }),
+    }).catch((e) => console.warn('Unlink server sync error:', e));
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('cognitivesaathi_sync'));
+    }
+
+    return { success: true, patient, caretakers: allCaretakers };
+  }
+
+  static dismissCaregiverRemovalNotice(patientId: string): void {
+    const allPatients = this.getPatients();
+    const p = allPatients.find((item) => item.id === patientId);
+    if (p) {
+      delete p.caregiverRemovalNotice;
+      this.savePatients(allPatients);
+    }
+    fetch(`/api/patients/${patientId}/dismiss-notice`, {
+      method: 'POST',
+    }).catch((e) => console.warn('Dismiss notice error:', e));
+
+    if (typeof window !== 'undefined') {
+      window.dispatchEvent(new CustomEvent('cognitivesaathi_sync'));
+    }
+  }
+
+  static dismissPatientRemovalNotice(caretakerId: string, noticeId?: string): void {
+    const allCaretakers = this.getCaretakers();
+    const c = allCaretakers.find((item) => item.id === caretakerId);
+    if (c) {
+      if (noticeId) {
+        c.patientRemovalNotices = (c.patientRemovalNotices || []).filter((n) => n.id !== noticeId);
+      } else {
+        c.patientRemovalNotices = [];
+      }
+      this.saveCaretakers(allCaretakers);
+    }
+    fetch(`/api/caretakers/${caretakerId}/dismiss-notice`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ noticeId }),
+    }).catch((e) => console.warn('Dismiss notice error:', e));
 
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('cognitivesaathi_sync'));

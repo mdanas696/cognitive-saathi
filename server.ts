@@ -299,10 +299,60 @@ app.post('/api/patients/:id/link-caregiver', (req, res) => {
 // Unlink caregiver from patient
 app.post('/api/patients/:id/unlink-caregiver', (req, res) => {
   try {
-    const result = ServerDB.unlinkCaregiver(req.params.id);
+    const { initiator = 'CAREGIVER', initiatorName, initiatorId } = {
+      ...req.query,
+      ...req.body,
+    };
+    const result = ServerDB.unlinkCaregiver(
+      req.params.id,
+      initiator as 'CAREGIVER' | 'PATIENT',
+      initiatorName,
+      initiatorId
+    );
     res.json(result);
   } catch (err: any) {
     res.status(500).json({ error: 'Failed to unlink caregiver', details: err?.message });
+  }
+});
+
+// Caregiver deletes / removes patient from their care circle
+app.post('/api/caretakers/:id/remove-patient/:patientId', (req, res) => {
+  try {
+    const caretakerId = req.params.id;
+    const patientId = req.params.patientId;
+    const { initiatorName } = req.body || {};
+    const caretakers = ServerDB.getCaretakers();
+    const ct = caretakers.find((c: any) => c.id === caretakerId);
+    const result = ServerDB.unlinkCaregiver(
+      patientId,
+      'CAREGIVER',
+      initiatorName || ct?.fullName,
+      caretakerId
+    );
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to remove patient', details: err?.message });
+  }
+});
+
+// Dismiss caregiver removal notice on patient profile
+app.post('/api/patients/:id/dismiss-notice', (req, res) => {
+  try {
+    const success = ServerDB.dismissCaregiverRemovalNotice(req.params.id);
+    res.json({ success });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to dismiss notice', details: err?.message });
+  }
+});
+
+// Dismiss patient removal notice on caregiver profile
+app.post('/api/caretakers/:id/dismiss-notice', (req, res) => {
+  try {
+    const { noticeId } = req.body || {};
+    const success = ServerDB.dismissPatientRemovalNotice(req.params.id, noticeId);
+    res.json({ success });
+  } catch (err: any) {
+    res.status(500).json({ error: 'Failed to dismiss notice', details: err?.message });
   }
 });
 

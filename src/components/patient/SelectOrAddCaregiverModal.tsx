@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ShieldCheck, UserPlus, X, Phone, Heart, Check, Trash2, KeyRound, User, AlertCircle } from 'lucide-react';
 import { PatientProfile, CaretakerProfile, LanguageCode } from '../../types';
 import { OfflineStore } from '../../lib/offlineStore';
+import { FirestoreService } from '../../lib/firestoreService';
 
 interface SelectOrAddCaregiverModalProps {
   isOpen: boolean;
@@ -51,10 +52,27 @@ export const SelectOrAddCaregiverModal: React.FC<SelectOrAddCaregiverModalProps>
     }
 
     try {
+      // 1. Link via Firestore shared backend first for instant cross-device sync
+      const firestoreRes = await FirestoreService.linkPatientWithCaregiverKey(patient.id, cleanKey);
+      if (firestoreRes.success && firestoreRes.patient) {
+        setIsLoading(false);
+        OfflineStore.savePatient(firestoreRes.patient);
+        if (firestoreRes.caregiver) {
+          OfflineStore.addCaretaker(firestoreRes.caregiver);
+        }
+        setSuccess(`Successfully linked with ${firestoreRes.caregiver?.fullName || 'caregiver'}!`);
+        onCaregiverLinked(firestoreRes.patient);
+        setTimeout(() => {
+          onClose();
+        }, 1200);
+        return;
+      }
+
+      // 2. Fallback to offline store check
       const result = await OfflineStore.linkPatientToCaregiverByKeyAsync(patient.id, cleanKey);
       setIsLoading(false);
       if (!result.success || !result.patient) {
-        setError(result.error || 'Caregiver key not found. Please verify with your caregiver.');
+        setError(firestoreRes.error || result.error || 'Caregiver key not found. Please verify with your caregiver.');
         return;
       }
 

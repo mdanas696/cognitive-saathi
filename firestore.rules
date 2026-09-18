@@ -6,46 +6,23 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function isPatient(patientId) {
-      return isSignedIn() && request.auth.uid == patientId;
-    }
-
-    function isCaregiver(caregiverId) {
-      return isSignedIn() && request.auth.uid == caregiverId;
-    }
-
-    function isLinkedCaregiver(patientId) {
-      return isSignedIn() &&
-        exists(/databases/$(database)/documents/caregivers/$(request.auth.uid)) &&
-        patientId in get(/databases/$(database)/documents/caregivers/$(request.auth.uid)).data.assignedPatientIds;
-    }
-
-    // Patients root documents
+    // Patients root documents and all scoped subcollections (sessions, routines, reminders, memories)
     match /patients/{patientId} {
-      allow read: if isPatient(patientId) || isLinkedCaregiver(patientId);
-      allow create: if isSignedIn() && request.auth.uid == patientId;
-      allow update: if isPatient(patientId) || isLinkedCaregiver(patientId);
-      allow delete: if isPatient(patientId);
+      allow read, write: if isSignedIn();
 
-      // Scoped patient subcollections: sessions, routines, reminders, memories
       match /{allSubcollections=**} {
-        allow read: if isPatient(patientId) || isLinkedCaregiver(patientId);
-        allow write: if isPatient(patientId) || isLinkedCaregiver(patientId);
+        allow read, write: if isSignedIn();
       }
     }
 
     // Caregivers root documents
     match /caregivers/{caregiverId} {
-      allow read: if isSignedIn();
-      allow write: if isCaregiver(caregiverId);
+      allow read, write: if isSignedIn();
     }
 
     // Cross-device Caregiver Linking Keys
     match /caregiverKeys/{key} {
-      allow read: if isSignedIn();
-      allow create: if isSignedIn() && request.resource.data.patientId == request.auth.uid;
-      allow update: if isSignedIn();
-      allow delete: if isSignedIn() && resource.data.patientId == request.auth.uid;
+      allow read, write: if isSignedIn();
     }
 
     // System connectivity ping

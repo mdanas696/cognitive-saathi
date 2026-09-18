@@ -28,6 +28,7 @@ import {
 import { CaretakerProfile, PatientProfile, LanguageCode, TextScale } from '../../types';
 import { translations } from '../../lib/i18n';
 import { OfflineStore } from '../../lib/offlineStore';
+import { FirestoreService } from '../../lib/firestoreService';
 import { ElderAvatar } from '../common/ElderAvatar';
 
 interface CaregiverMeProfileProps {
@@ -123,7 +124,7 @@ export const CaregiverMeProfile: React.FC<CaregiverMeProfileProps> = ({
     setTimeout(() => setKeySuccess(null), 3500);
   };
 
-  const handleLinkPatient = () => {
+  const handleLinkPatient = async () => {
     if (!caretaker) return;
     setLinkError(null);
     setLinkSuccess(null);
@@ -134,18 +135,39 @@ export const CaregiverMeProfile: React.FC<CaregiverMeProfileProps> = ({
       return;
     }
 
-    const res = OfflineStore.linkCaregiverToPatientByKey(caretaker.id, clean);
-    if (!res.success) {
-      setLinkError(res.error || 'No matching patient found.');
-      return;
-    }
+    try {
+      // 1. Try Firestore shared backend link first
+      const fRes = await FirestoreService.linkCaregiverToPatient(caretaker.id, clean);
+      if (fRes.success && fRes.patient) {
+        setLinkSuccess(`Successfully connected ${fRes.patient.fullName} to your care circle!`);
+        setPatientLinkInput('');
+        setIsLinkingPatient(false);
+        OfflineStore.savePatient(fRes.patient);
+        const updatedAssigned = Array.from(new Set([...(caretaker.assignedPatientIds || []), fRes.patient.id]));
+        const updatedC = { ...caretaker, assignedPatientIds: updatedAssigned };
+        OfflineStore.addCaretaker(updatedC);
+        onUpdateCaretaker(updatedC);
+        onSelectPatient(fRes.patient);
+        setTimeout(() => setLinkSuccess(null), 3500);
+        return;
+      }
 
-    if (res.patient) {
-      setLinkSuccess(`Successfully connected ${res.patient.fullName} to your care circle!`);
-      setPatientLinkInput('');
-      setIsLinkingPatient(false);
-      onSelectPatient(res.patient);
-      setTimeout(() => setLinkSuccess(null), 3500);
+      // 2. Fallback to local store
+      const res = OfflineStore.linkCaregiverToPatientByKey(caretaker.id, clean);
+      if (!res.success) {
+        setLinkError(fRes.error || res.error || 'No matching patient found.');
+        return;
+      }
+
+      if (res.patient) {
+        setLinkSuccess(`Successfully connected ${res.patient.fullName} to your care circle!`);
+        setPatientLinkInput('');
+        setIsLinkingPatient(false);
+        onSelectPatient(res.patient);
+        setTimeout(() => setLinkSuccess(null), 3500);
+      }
+    } catch (err: any) {
+      setLinkError(err?.message || 'Failed to link patient.');
     }
   };
 

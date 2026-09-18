@@ -46,6 +46,7 @@ import {
   DEFAULT_MEMORIES,
   DEFAULT_RECENT_SESSIONS,
 } from './lib/offlineStore';
+import { FirestoreService } from './lib/firestoreService';
 import { Header } from './components/layout/Header';
 import { VoiceAssistantModal } from './components/voice/VoiceAssistantModal';
 import { VoicePackModal } from './components/voice/VoicePackModal';
@@ -334,6 +335,150 @@ export default function App() {
     };
   }, [activeCaretaker, role, patient.id]);
 
+  // Real-time Firestore Subscriptions for the active Patient (Memories, Routines, Reminders, Sessions, Profile)
+  useEffect(() => {
+    if (!patient || !patient.id) return;
+
+    // 1. Real-time patient profile updates (streak, caretaker link, etc.)
+    const unsubPatient = FirestoreService.listenToPatient(patient.id, (p) => {
+      if (p) {
+        setPatient((prev) => {
+          if (prev.id === p.id) {
+            return { ...prev, ...p };
+          }
+          return prev;
+        });
+        OfflineStore.savePatient(p);
+      }
+    });
+
+    // 2. Real-time Memory Moments
+    let hasInitMem = false;
+    const unsubMemories = FirestoreService.listenToMemories(patient.id, (realtimeMems) => {
+      if (realtimeMems && realtimeMems.length > 0) {
+        setMemories(realtimeMems);
+        OfflineStore.saveMemories(realtimeMems, patient.id);
+        hasInitMem = true;
+      } else if (!hasInitMem) {
+        hasInitMem = true;
+        const local = OfflineStore.getMemories(patient.id);
+        if (local && local.length > 0) {
+          local.forEach((m) => {
+            FirestoreService.addMemoryMoment(patient.id, m).catch(() => {});
+          });
+        }
+      } else {
+        setMemories([]);
+        OfflineStore.saveMemories([], patient.id);
+      }
+    });
+
+    // 3. Real-time Daily Routine Checklist
+    let hasInitRoutine = false;
+    const unsubRoutines = FirestoreService.listenToRoutines(patient.id, (realtimeRoutines) => {
+      if (realtimeRoutines && realtimeRoutines.length > 0) {
+        setRoutine(realtimeRoutines);
+        OfflineStore.saveRoutine(realtimeRoutines);
+        hasInitRoutine = true;
+      } else if (!hasInitRoutine) {
+        hasInitRoutine = true;
+        const local = OfflineStore.getRoutine(patient.id);
+        if (local && local.length > 0) {
+          local.forEach((r) => {
+            FirestoreService.updateRoutineTask(patient.id, r).catch(() => {});
+          });
+        }
+      }
+    });
+
+    // 4. Real-time Reminders
+    let hasInitRem = false;
+    const unsubReminders = FirestoreService.listenToReminders(patient.id, (realtimeReminders) => {
+      if (realtimeReminders && realtimeReminders.length > 0) {
+        setReminders(realtimeReminders);
+        OfflineStore.saveReminders(realtimeReminders);
+        hasInitRem = true;
+      } else if (!hasInitRem) {
+        hasInitRem = true;
+        const local = OfflineStore.getReminders(patient.id);
+        if (local && local.length > 0) {
+          local.forEach((r) => {
+            FirestoreService.updateReminderItem(patient.id, r).catch(() => {});
+          });
+        }
+      }
+    });
+
+    // 5. Real-time Game Activity Sessions
+    const unsubSessions = FirestoreService.listenToSessions(patient.id, (realtimeSessions) => {
+      if (realtimeSessions && realtimeSessions.length > 0) {
+        const sorted = [...realtimeSessions].sort(
+          (a, b) => (b.completedAt || '').localeCompare(a.completedAt || '')
+        );
+        setSessions(sorted);
+      }
+    });
+
+    return () => {
+      unsubPatient();
+      unsubMemories();
+      unsubRoutines();
+      unsubReminders();
+      unsubSessions();
+    };
+  }, [patient?.id]);
+
+  // Real-time Firestore subscription for Caregiver (Auto-syncs assigned patients when patient links via Caregiver Key)
+  useEffect(() => {
+    if (!activeCaretaker || !activeCaretaker.id) return;
+
+    const unsubCaretaker = FirestoreService.listenToCaregiver(activeCaretaker.id, async (cg) => {
+      if (cg) {
+        setActiveCaretaker((prev) => (prev ? { ...prev, ...cg } : cg));
+        OfflineStore.addCaretaker(cg);
+
+        // Fetch all assigned patients from Firestore to ensure instant cross-device synchronization
+        if (cg.assignedPatientIds && cg.assignedPatientIds.length > 0) {
+          try {
+            const patientPromises = cg.assignedPatientIds.map((pId) => FirestoreService.getPatient(pId));
+            const fetchedList = await Promise.all(patientPromises);
+            const validPatients = fetchedList.filter(Boolean) as PatientProfile[];
+
+            if (validPatients.length > 0) {
+              validPatients.forEach((p) => OfflineStore.savePatient(p));
+              setAllPatients((prev) => {
+                const map = new Map<string, PatientProfile>();
+                (prev || []).forEach((p) => { if (p?.id) map.set(p.id, p); });
+                validPatients.forEach((p) => { if (p?.id) map.set(p.id, p); });
+                return Array.from(map.values());
+              });
+
+              // If current patient is not set, or caregiver was on empty state, auto-select the assigned patient
+              setPatient((current) => {
+                if (!current?.id || !cg.assignedPatientIds?.includes(current.id)) {
+                  const newest = validPatients[validPatients.length - 1];
+                  OfflineStore.setActivePatientId(newest.id);
+                  setRoutine(OfflineStore.getRoutine(newest.id));
+                  setReminders(OfflineStore.getReminders(newest.id));
+                  setSessions(OfflineStore.getSessions(newest.id));
+                  setMemories(OfflineStore.getMemories(newest.id));
+                  return newest;
+                }
+                return current;
+              });
+            }
+          } catch (e) {
+            console.warn('Error syncing caregiver patients from Firestore:', e);
+          }
+        }
+      }
+    });
+
+    return () => {
+      unsubCaretaker();
+    };
+  }, [activeCaretaker?.id]);
+
   // Manual trigger for testing sync
   const handleTriggerSync = () => {
     setConnectivity('SYNCING');
@@ -351,18 +496,34 @@ export default function App() {
     );
     setRoutine(updated);
     OfflineStore.saveRoutine(updated);
+    const targetTask = updated.find((r) => r.id === taskId);
+    if (patient && patient.id && targetTask) {
+      FirestoreService.updateRoutineTask(patient.id, targetTask).catch((err) => {
+        console.warn('Error syncing routine task to Firestore:', err);
+      });
+    }
   };
 
   const handleAddPatientTask = (task: RoutineTask) => {
     const updated = [...routine, task];
     setRoutine(updated);
     OfflineStore.saveRoutine(updated);
+    if (patient && patient.id) {
+      FirestoreService.updateRoutineTask(patient.id, task).catch((err) => {
+        console.warn('Error adding routine task to Firestore:', err);
+      });
+    }
   };
 
   const handleDeleteRoutineTask = (taskId: string) => {
     const updated = routine.filter((r) => r.id !== taskId);
     setRoutine(updated);
     OfflineStore.saveRoutine(updated);
+    if (patient && patient.id) {
+      FirestoreService.deleteRoutineTask(patient.id, taskId).catch((err) => {
+        console.warn('Error deleting routine task from Firestore:', err);
+      });
+    }
   };
 
   // Reminders Toggle & Management
@@ -372,12 +533,23 @@ export default function App() {
     );
     setReminders(updated);
     OfflineStore.saveReminders(updated);
+    const targetRem = updated.find((r) => r.id === remId);
+    if (patient && patient.id && targetRem) {
+      FirestoreService.updateReminderItem(patient.id, targetRem).catch((err) => {
+        console.warn('Error syncing reminder to Firestore:', err);
+      });
+    }
   };
 
   const handleAddReminder = (item: ReminderItem) => {
     const updated = [item, ...reminders];
     setReminders(updated);
     OfflineStore.saveReminders(updated);
+    if (patient && patient.id) {
+      FirestoreService.updateReminderItem(patient.id, item).catch((err) => {
+        console.warn('Error adding reminder to Firestore:', err);
+      });
+    }
   };
 
   const handleToggleReminderEnabled = (id: string) => {
@@ -386,23 +558,44 @@ export default function App() {
     );
     setReminders(updated);
     OfflineStore.saveReminders(updated);
+    const targetRem = updated.find((r) => r.id === id);
+    if (patient && patient.id && targetRem) {
+      FirestoreService.updateReminderItem(patient.id, targetRem).catch((err) => {
+        console.warn('Error updating reminder in Firestore:', err);
+      });
+    }
   };
 
   const handleDeleteReminder = (id: string) => {
     const updated = reminders.filter((r) => r.id !== id);
     setReminders(updated);
     OfflineStore.saveReminders(updated);
+    if (patient && patient.id) {
+      FirestoreService.deleteReminderItem(patient.id, id).catch((err) => {
+        console.warn('Error deleting reminder from Firestore:', err);
+      });
+    }
   };
 
   // Memory Moments Handlers (Available for both Caregiver and Patient)
   const handleAddMemory = (newMem: MemoryMoment) => {
     const updated = OfflineStore.addMemory(newMem, patient.id);
     setMemories(updated);
+    if (patient && patient.id) {
+      FirestoreService.addMemoryMoment(patient.id, newMem).catch((err) => {
+        console.warn('Error saving memory moment to Firestore:', err);
+      });
+    }
   };
 
   const handleDeleteMemory = (id: string) => {
     const updated = OfflineStore.deleteMemory(id, patient.id);
     setMemories(updated);
+    if (patient && patient.id) {
+      FirestoreService.deleteMemoryMoment(patient.id, id).catch((err) => {
+        console.warn('Error deleting memory moment from Firestore:', err);
+      });
+    }
   };
 
   // Game Launcher
@@ -421,8 +614,13 @@ export default function App() {
     setSessions((prev) => [session, ...prev]);
     setPatient((prev) => ({
       ...prev,
-      todayCompletedCount: prev.todayCompletedCount + 1,
+      todayCompletedCount: (prev.todayCompletedCount || 0) + 1,
     }));
+    if (patient && patient.id) {
+      FirestoreService.recordGameSession(patient.id, session).catch((err) => {
+        console.warn('Error recording game session to Firestore:', err);
+      });
+    }
   };
 
   // Dynamic Text Scaling classes applied to container
@@ -523,6 +721,11 @@ export default function App() {
     OfflineStore.savePatient(updated);
     setPatient(updated);
     setAllPatients(OfflineStore.getPatients());
+    if (updated.id) {
+      FirestoreService.updatePatient(updated.id, updated).catch((err) => {
+        console.warn('Error updating patient in Firestore:', err);
+      });
+    }
   };
 
   const handleDeletePatient = (patientId: string) => {

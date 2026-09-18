@@ -161,6 +161,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           OfflineStore.savePatient(firestorePatient);
           OfflineStore.setActivePatientId(firestorePatient.id);
 
+          // Auto-sync with Caregiver in Firestore if caregiver key is set
+          if (firestorePatient.linkedCaregiverKey) {
+            FirestoreService.linkPatientWithCaregiverKey(
+              firestorePatient.id,
+              firestorePatient.linkedCaregiverKey
+            ).catch((e) => console.warn('Auto caregiver link on login error:', e));
+          }
+
           VoiceService.speak(`Welcome back, ${firestorePatient.preferredName || firestorePatient.fullName}. Entering your space.`, lang);
           onLoginPatient(firestorePatient);
           return;
@@ -193,6 +201,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         });
         OfflineStore.savePatient(target);
         OfflineStore.setActivePatientId(target.id);
+
+        if (target.linkedCaregiverKey) {
+          FirestoreService.linkPatientWithCaregiverKey(target.id, target.linkedCaregiverKey).catch(() => {});
+        }
 
         VoiceService.speak(`Welcome back, ${target.preferredName || target.fullName}. Entering your space.`, lang);
         onLoginPatient(target);
@@ -356,6 +368,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
       // 1. Save patient to Firestore shared backend
       try {
         await FirestoreService.registerPatient(newPatient, regPassword.trim());
+        if (cleanLinkedCaregiverKey) {
+          await FirestoreService.linkPatientWithCaregiverKey(newPatient.id, cleanLinkedCaregiverKey);
+        }
       } catch (fErr) {
         console.warn('Firestore patient registration:', fErr);
       }
@@ -439,7 +454,18 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         if (firestoreCaregiver) {
           let assignedPatient: PatientProfile | null = null;
           if (firestoreCaregiver.assignedPatientIds && firestoreCaregiver.assignedPatientIds.length > 0) {
-            assignedPatient = await FirestoreService.getPatient(firestoreCaregiver.assignedPatientIds[0]);
+            try {
+              const fetched = await Promise.all(
+                firestoreCaregiver.assignedPatientIds.map((pId) => FirestoreService.getPatient(pId))
+              );
+              const valid = fetched.filter(Boolean) as PatientProfile[];
+              valid.forEach((p) => OfflineStore.savePatient(p));
+              if (valid.length > 0) {
+                assignedPatient = valid[valid.length - 1];
+              }
+            } catch (pErr) {
+              console.warn('Error pre-fetching assigned patients:', pErr);
+            }
           }
 
           OfflineStore.saveAuthSession({

@@ -141,9 +141,18 @@ export class FirestoreService {
       const uMatch = (p.username || '').toLowerCase() === cleanId;
       const pMatch = (p.phone || '').replace(/\D/g, '').endsWith(cleanId.replace(/\D/g, ''));
       const idMatch = p.id === identifier;
+      const keyMatch =
+        (p.patientKey || '').toLowerCase() === cleanId ||
+        (p.linkedCaregiverKey || '').toLowerCase() === cleanId;
 
-      if (uMatch || pMatch || idMatch) {
+      if (uMatch || pMatch || idMatch || keyMatch) {
         if (!password || p.password === password || p.pin === password) {
+          // Automatically ensure patient is registered in the caregiver's assigned list
+          if (p.linkedCaregiverKey) {
+            this.linkPatientWithCaregiverKey(p.id, p.linkedCaregiverKey).catch((e) => {
+              console.warn('Auto caregiver link on patient login error:', e);
+            });
+          }
           return p;
         }
       }
@@ -369,6 +378,163 @@ export class FirestoreService {
     return { patientId: targetPatientId, patient: targetPatient! };
   }
 
+  // Link a Patient to Caregiver using Caregiver Key (Executed from Patient side)
+  static async linkPatientWithCaregiverKey(
+    patientId: string,
+    caregiverKeyInput: string
+  ): Promise<{ success: boolean; caregiver?: CaretakerProfile; patient?: PatientProfile; error?: string }> {
+    await ensureAuthUser();
+    const cleanKey = caregiverKeyInput.trim().toUpperCase();
+    if (!cleanKey) {
+      return { success: false, error: 'Please enter a valid Caregiver Key.' };
+    }
+
+    try {
+      // 1. Search caregivers in Firestore
+      const cgCol = collection(db, 'caregivers');
+      const snap = await getDocs(cgCol);
+      let foundCaregiver: CaretakerProfile | null = null;
+
+      for (const d of snap.docs) {
+        const cg = d.data() as CaretakerProfile;
+        if ((cg.caregiverKey || '').toUpperCase() === cleanKey) {
+          foundCaregiver = cg;
+          break;
+        }
+      }
+
+      // If not found in caregivers collection, check caregiverKeys collection
+      if (!foundCaregiver) {
+        const keyRef = doc(db, 'caregiverKeys', cleanKey);
+        const keySnap = await getDoc(keyRef);
+        if (keySnap.exists()) {
+          const kData = keySnap.data() as CaregiverKeyDoc;
+          if (kData.redeemedByCaregiverId) {
+            foundCaregiver = await this.getCaregiver(kData.redeemedByCaregiverId);
+          }
+        }
+      }
+
+      if (!foundCaregiver) {
+        return {
+          success: false,
+          error: `Caregiver key "${cleanKey}" not found. Ask your family member for their active Caregiver Key.`,
+        };
+      }
+
+      // 2. Add patientId to caregiver's assignedPatientIds
+      const updatedAssigned = Array.from(new Set([...(foundCaregiver.assignedPatientIds || []), patientId]));
+      await this.updateCaregiver(foundCaregiver.id, {
+        assignedPatientIds: updatedAssigned,
+      });
+
+      // 3. Update patient with linked caregiver details
+      const patientUpdates: Partial<PatientProfile> = {
+        hasCaregiver: true,
+        linkedCaregiverKey: cleanKey,
+        caregiverName: foundCaregiver.fullName,
+        caregiverPhone: foundCaregiver.phone,
+      };
+      await this.updatePatient(patientId, patientUpdates);
+
+      const updatedPatient = await this.getPatient(patientId);
+
+      return {
+        success: true,
+        caregiver: { ...foundCaregiver, assignedPatientIds: updatedAssigned },
+        patient: updatedPatient || undefined,
+      };
+    } catch (err: any) {
+      console.error('Error linking patient with caregiver key:', err);
+      return { success: false, error: err?.message || 'Failed to link caregiver.' };
+    }
+  }
+
+  // Link Caregiver to a Patient by Patient Key / Identifier (Executed from Caregiver side)
+  static async linkCaregiverToPatient(
+    caregiverId: string,
+    patientIdentifier: string
+  ): Promise<{ success: boolean; patient?: PatientProfile; error?: string }> {
+    await ensureAuthUser();
+    const cleanId = patientIdentifier.trim().toUpperCase();
+    if (!cleanId) {
+      return { success: false, error: 'Please enter a Patient Key or username.' };
+    }
+
+    try {
+      const caregiver = await this.getCaregiver(caregiverId);
+      if (!caregiver) {
+        return { success: false, error: 'Caregiver account not found.' };
+      }
+
+      // 1. Try to find patient by patientKey, username, phone, or id
+      const pCol = collection(db, 'patients');
+      const snap = await getDocs(pCol);
+      let foundPatient: PatientProfile | null = null;
+
+      for (const d of snap.docs) {
+        const p = d.data() as PatientProfile;
+        const pKey = (p.patientKey || '').toUpperCase();
+        const lKey = (p.linkedCaregiverKey || '').toUpperCase();
+        const pUser = (p.username || '').toUpperCase();
+        const pPhone = (p.phone || '').replace(/\D/g, '');
+        const cleanDigits = cleanId.replace(/\D/g, '');
+
+        if (
+          pKey === cleanId ||
+          lKey === cleanId ||
+          pUser === cleanId ||
+          p.id === patientIdentifier ||
+          (cleanDigits.length >= 7 && pPhone.endsWith(cleanDigits))
+        ) {
+          foundPatient = p;
+          break;
+        }
+      }
+
+      // Check caregiverKeys collection as fallback
+      if (!foundPatient) {
+        const keyRef = doc(db, 'caregiverKeys', cleanId);
+        const keySnap = await getDoc(keyRef);
+        if (keySnap.exists()) {
+          const kData = keySnap.data() as CaregiverKeyDoc;
+          foundPatient = await this.getPatient(kData.patientId);
+        }
+      }
+
+      if (!foundPatient) {
+        return {
+          success: false,
+          error: `Patient with key or identifier "${patientIdentifier}" not found.`,
+        };
+      }
+
+      // 2. Add to caregiver's assigned list
+      const updatedAssigned = Array.from(new Set([...(caregiver.assignedPatientIds || []), foundPatient.id]));
+      await this.updateCaregiver(caregiverId, {
+        assignedPatientIds: updatedAssigned,
+      });
+
+      // 3. Update patient's caregiver information
+      await this.updatePatient(foundPatient.id, {
+        hasCaregiver: true,
+        caregiverName: caregiver.fullName,
+        caregiverPhone: caregiver.phone,
+        linkedCaregiverKey: caregiver.caregiverKey || cleanId,
+      });
+
+      const refreshedPatient = await this.getPatient(foundPatient.id);
+
+      return {
+        success: true,
+        patient: refreshedPatient || foundPatient,
+      };
+    } catch (err: any) {
+      console.error('Error linking caregiver to patient:', err);
+      return { success: false, error: err?.message || 'Failed to link patient.' };
+    }
+  }
+
   // -------------------------------------------------------------
   // REAL-TIME ACTIVITY SYNC (IMMEDIATE SUBCOLLECTION WRITES)
   // -------------------------------------------------------------
@@ -402,6 +568,12 @@ export class FirestoreService {
     });
   }
 
+  static async deleteRoutineTask(patientId: string, taskId: string): Promise<void> {
+    await ensureAuthUser();
+    const taskRef = doc(db, 'patients', patientId, 'routines', taskId);
+    await deleteDoc(taskRef);
+  }
+
   static async updateReminderItem(patientId: string, reminder: ReminderItem): Promise<void> {
     await ensureAuthUser();
     const remRef = doc(db, 'patients', patientId, 'reminders', reminder.id);
@@ -409,6 +581,12 @@ export class FirestoreService {
       ...reminder,
       updatedAt: new Date().toISOString(),
     });
+  }
+
+  static async deleteReminderItem(patientId: string, reminderId: string): Promise<void> {
+    await ensureAuthUser();
+    const remRef = doc(db, 'patients', patientId, 'reminders', reminderId);
+    await deleteDoc(remRef);
   }
 
   static async addMemoryMoment(patientId: string, memory: MemoryMoment): Promise<void> {

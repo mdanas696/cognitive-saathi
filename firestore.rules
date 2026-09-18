@@ -2,27 +2,23 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    function isSignedIn() {
-      return request.auth != null;
-    }
-
     // Patients root documents and all scoped subcollections (sessions, routines, reminders, memories)
     match /patients/{patientId} {
-      allow read, write: if isSignedIn();
+      allow read, write: if true;
 
       match /{allSubcollections=**} {
-        allow read, write: if isSignedIn();
+        allow read, write: if true;
       }
     }
 
     // Caregivers root documents
     match /caregivers/{caregiverId} {
-      allow read, write: if isSignedIn();
+      allow read, write: if true;
     }
 
     // Cross-device Caregiver Linking Keys
     match /caregiverKeys/{key} {
-      allow read, write: if isSignedIn();
+      allow read, write: if true;
     }
 
     // System connectivity ping

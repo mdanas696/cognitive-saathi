@@ -99,7 +99,7 @@ export const CaregiverMeProfile: React.FC<CaregiverMeProfileProps> = ({
   // Unlink confirmation
   const [unlinkingPatientId, setUnlinkingPatientId] = useState<string | null>(null);
 
-  const handleSaveCaregiverKey = () => {
+  const handleSaveCaregiverKey = async () => {
     if (!caretaker) return;
     setKeyError(null);
     setKeySuccess(null);
@@ -116,9 +116,23 @@ export const CaregiverMeProfile: React.FC<CaregiverMeProfileProps> = ({
       return;
     }
 
-    if (res.caretaker) {
-      onUpdateCaretaker(res.caretaker);
+    const updatedCaretaker: CaretakerProfile = res.caretaker || { ...caretaker, caregiverKey: clean };
+
+    // 1. Sync to Firestore instantly for real-time cross-device patient linking
+    try {
+      await FirestoreService.registerCaregiverKeyMapping(clean, updatedCaretaker);
+    } catch (fsErr) {
+      console.warn('Firestore caregiver key sync warning:', fsErr);
     }
+
+    // 2. Sync to Server DB
+    fetch(`/api/caretakers/${caretaker.id}/key`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ caregiverKey: clean, caretaker: updatedCaretaker }),
+    }).catch((e) => console.warn('Server caregiver key sync error:', e));
+
+    onUpdateCaretaker(updatedCaretaker);
     setKeySuccess(`Your Caregiver Key has been updated to "${clean}"!`);
     setIsEditingKey(false);
     setTimeout(() => setKeySuccess(null), 3500);

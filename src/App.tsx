@@ -432,6 +432,19 @@ export default function App() {
   useEffect(() => {
     if (!activeCaretaker || !activeCaretaker.id) return;
 
+    // Instantly register caregiver key mapping in Firestore & Server for cross-device linking
+    const cgKey = (activeCaretaker.caregiverKey || '').trim().toUpperCase();
+    if (cgKey) {
+      FirestoreService.registerCaregiverKeyMapping(cgKey, activeCaretaker).catch((e) => {
+        console.warn('Caregiver key Firestore registration error:', e);
+      });
+      fetch('/api/caretakers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(activeCaretaker),
+      }).catch(() => {});
+    }
+
     const unsubCaretaker = FirestoreService.listenToCaregiver(activeCaretaker.id, async (cg) => {
       if (cg) {
         setActiveCaretaker((prev) => (prev ? { ...prev, ...cg } : cg));
@@ -477,7 +490,7 @@ export default function App() {
     return () => {
       unsubCaretaker();
     };
-  }, [activeCaretaker?.id]);
+  }, [activeCaretaker?.id, activeCaretaker?.caregiverKey]);
 
   // Manual trigger for testing sync
   const handleTriggerSync = () => {

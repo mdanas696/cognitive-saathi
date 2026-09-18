@@ -29,6 +29,7 @@ import { LinkPatientKeyModal } from './LinkPatientKeyModal';
 import { PatientProfile, CaretakerProfile, ReminderItem, GameSessionResult, RoutineTask, LanguageCode } from '../../types';
 import { translations } from '../../lib/i18n';
 import { OfflineStore } from '../../lib/offlineStore';
+import { FirestoreService } from '../../lib/firestoreService';
 import { CaretakerRoutineManager } from './CaretakerRoutineManager';
 import { ElderAvatar } from '../common/ElderAvatar';
 
@@ -328,7 +329,7 @@ export const CaregiverDashboard: React.FC<CaregiverDashboardProps> = ({
   const [coPilotResponse, setCoPilotResponse] = useState<string | null>(null);
   const [isCoPilotLoading, setIsCoPilotLoading] = useState(false);
 
-  const handleSaveCaregiverKey = () => {
+  const handleSaveCaregiverKey = async () => {
     setKeyError(null);
     setKeySuccess(null);
     const clean = customKeyInput.trim().toUpperCase();
@@ -342,6 +343,20 @@ export const CaregiverDashboard: React.FC<CaregiverDashboardProps> = ({
       setKeyError(res.error || 'Failed to update key.');
       return;
     }
+
+    const updatedCaretaker: CaretakerProfile = res.caretaker || { ...caretaker, caregiverKey: clean };
+    try {
+      await FirestoreService.registerCaregiverKeyMapping(clean, updatedCaretaker);
+    } catch (fsErr) {
+      console.warn('Firestore key sync warning in CaregiverDashboard:', fsErr);
+    }
+
+    fetch(`/api/caretakers/${caretaker.id}/key`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ caregiverKey: clean, caretaker: updatedCaretaker }),
+    }).catch((e) => console.warn('Server key sync warning in CaregiverDashboard:', e));
+
     onUpdateCaregiverKey?.(clean);
     setKeySuccess(`Your Caregiver Key is now "${clean}"!`);
     setIsEditingKey(false);

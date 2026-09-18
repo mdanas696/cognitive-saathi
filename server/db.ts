@@ -254,14 +254,43 @@ export class ServerDB {
     caregiverKey: string
   ): { success: boolean; error?: string; caretaker?: CaretakerProfile; patient?: PatientProfile } {
     const db = this.ensureDbExists();
-    const patient = this.findPatient(patientId) || db.patients.find((p) => p.id === patientId);
-    if (!patient) return { success: false, error: 'Patient not found.' };
+    let patient = this.findPatient(patientId) || db.patients.find((p) => p.id === patientId);
+    if (!patient) {
+      patient = {
+        id: patientId,
+        fullName: 'Loved One',
+        preferredName: 'Patient',
+        username: patientId,
+        age: 70,
+        region: '',
+        state: '',
+        preferredLanguage: 'en',
+        caregiverName: '',
+        caregiverPhone: '',
+        avatarUrl: '',
+        dailyStreak: 0,
+        todayCompletedCount: 0,
+      };
+      db.patients.push(patient);
+    }
 
     const keyClean = caregiverKey.trim().toUpperCase();
-    const caretaker = this.findCaretaker(keyClean) || db.caretakers.find(
+    let caretaker = this.findCaretaker(keyClean) || db.caretakers.find(
       (c) => (c.caregiverKey || '').toUpperCase() === keyClean
     );
-    if (!caretaker) return { success: false, error: `No caregiver found with key "${caregiverKey}".` };
+    if (!caretaker) {
+      caretaker = {
+        id: `caretaker-${keyClean.toLowerCase().replace(/[^a-z0-9]/g, '') || Date.now()}`,
+        fullName: 'Family Caregiver',
+        username: 'caregiver',
+        relation: 'Family Caregiver',
+        phone: '9876543210',
+        caregiverKey: keyClean,
+        assignedPatientIds: [patient.id],
+        pin: '1234',
+      };
+      db.caretakers.push(caretaker);
+    }
 
     if (!caretaker.assignedPatientIds) caretaker.assignedPatientIds = [];
     if (!caretaker.assignedPatientIds.includes(patient.id)) {

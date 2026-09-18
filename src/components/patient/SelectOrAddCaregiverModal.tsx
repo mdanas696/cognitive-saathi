@@ -53,7 +53,7 @@ export const SelectOrAddCaregiverModal: React.FC<SelectOrAddCaregiverModalProps>
 
     try {
       // 1. Link via Firestore shared backend first for instant cross-device sync
-      const firestoreRes = await FirestoreService.linkPatientWithCaregiverKey(patient.id, cleanKey);
+      const firestoreRes = await FirestoreService.linkPatientWithCaregiverKey(patient.id, cleanKey, patient);
       if (firestoreRes.success && firestoreRes.patient) {
         setIsLoading(false);
         OfflineStore.savePatient(firestoreRes.patient);
@@ -137,6 +137,16 @@ export const SelectOrAddCaregiverModal: React.FC<SelectOrAddCaregiverModalProps>
     };
 
     OfflineStore.savePatient(updatedPatient);
+
+    // Sync to Firestore & Server for cross-device consistency
+    FirestoreService.registerCaregiverKeyMapping(generatedKey, newCaretaker).catch(() => {});
+    FirestoreService.updatePatient(patient.id, updatedPatient).catch(() => {});
+    fetch('/api/caretakers', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newCaretaker),
+    }).catch(() => {});
+
     setSuccess(`Caregiver ${fullName.trim()} created & linked! (Caregiver Key: ${generatedKey})`);
     onCaregiverLinked(updatedPatient);
     setTimeout(() => {

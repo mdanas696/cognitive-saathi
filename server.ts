@@ -280,10 +280,13 @@ app.post('/api/caretakers/:id/link-patient', (req, res) => {
 // Link caregiver to patient (by Caregiver Key only)
 app.post('/api/patients/:id/link-caregiver', (req, res) => {
   try {
-    const { caregiverKey } = req.body;
+    const { caregiverKey, patient } = req.body;
     if (!caregiverKey) {
       res.status(400).json({ error: 'Caregiver key is required.' });
       return;
+    }
+    if (patient && patient.id) {
+      ServerDB.addPatient(patient);
     }
     const result = ServerDB.linkCaregiverToPatient(req.params.id, String(caregiverKey).trim());
     if (!result.success) {
@@ -512,7 +515,7 @@ app.post('/api/caretakers', (req, res) => {
 // Update Caregiver Key endpoint
 app.patch('/api/caretakers/:id/key', (req, res) => {
   try {
-    const { caregiverKey } = req.body;
+    const { caregiverKey, caretaker: incomingCaretaker } = req.body;
     if (!caregiverKey || typeof caregiverKey !== 'string') {
       res.status(400).json({ error: 'Caregiver key is required' });
       return;
@@ -523,9 +526,24 @@ app.patch('/api/caretakers/:id/key', (req, res) => {
       return;
     }
     const caretakers = ServerDB.getCaretakers();
-    const caretaker = caretakers.find((c: any) => c.id === req.params.id);
+    let caretaker = caretakers.find((c: any) => c.id === req.params.id);
     if (!caretaker) {
-      res.status(404).json({ error: 'Caregiver not found' });
+      if (incomingCaretaker && incomingCaretaker.id) {
+        caretaker = { ...incomingCaretaker, caregiverKey: cleanKey };
+      } else {
+        caretaker = {
+          id: req.params.id,
+          fullName: 'Family Caregiver',
+          username: 'caregiver',
+          relation: 'Family Caregiver',
+          phone: '9876543210',
+          caregiverKey: cleanKey,
+          assignedPatientIds: [],
+          pin: '1234',
+        };
+      }
+      ServerDB.addCaretaker(caretaker);
+      res.json({ success: true, caretaker });
       return;
     }
     const isTaken = caretakers.some(

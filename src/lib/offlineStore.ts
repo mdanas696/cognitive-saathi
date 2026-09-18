@@ -763,10 +763,11 @@ export class OfflineStore {
     }
 
     try {
+      const currentPatient = this.getPatient(patientId);
       const res = await fetch(`/api/patients/${patientId}/link-caregiver`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ caregiverKey: cleanKey }),
+        body: JSON.stringify({ caregiverKey: cleanKey, patient: currentPatient }),
       });
 
       if (res.ok) {

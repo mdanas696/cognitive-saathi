@@ -549,49 +549,142 @@ export class FirestoreService {
     }
   }
 
+  // Register a Patient Key mapping in Firestore for instant cross-device lookup
+  static async registerPatientKeyMapping(key: string, patient: PatientProfile): Promise<void> {
+    try {
+      await ensureAuthUser();
+      const cleanKey = key.trim().toUpperCase();
+      if (!cleanKey || !patient?.id) return;
+
+      const keyData = {
+        key: cleanKey,
+        patientId: patient.id,
+        patientKey: cleanKey,
+        fullName: patient.fullName || '',
+        preferredName: patient.preferredName || '',
+        username: patient.username || '',
+        phone: patient.phone || '',
+        updatedAt: new Date().toISOString(),
+      };
+
+      await setDoc(doc(db, 'patientKeys', cleanKey), keyData, { merge: true });
+
+      // If key starts with PT-, also register stripped version
+      if (cleanKey.startsWith('PT-')) {
+        const stripped = cleanKey.replace(/^PT-/, '');
+        if (stripped.length >= 3) {
+          await setDoc(doc(db, 'patientKeys', stripped), keyData, { merge: true });
+        }
+      } else {
+        // If key doesn't start with PT-, also register with PT- prefix
+        await setDoc(doc(db, 'patientKeys', `PT-${cleanKey}`), keyData, { merge: true });
+      }
+
+      // Also ensure patient document has the patientKey field
+      const pRef = doc(db, 'patients', patient.id);
+      const pSnap = await getDoc(pRef);
+      if (pSnap.exists()) {
+        await updateDoc(pRef, { patientKey: cleanKey });
+      } else {
+        await setDoc(pRef, { ...patient, patientKey: cleanKey }, { merge: true });
+      }
+    } catch (err) {
+      console.warn('Failed to register patient key in Firestore:', err);
+    }
+  }
+
   // Link Caregiver to a Patient by Patient Key / Identifier (Executed from Caregiver side)
   static async linkCaregiverToPatient(
     caregiverId: string,
-    patientIdentifier: string
-  ): Promise<{ success: boolean; patient?: PatientProfile; error?: string }> {
+    patientIdentifier: string,
+    caretakerFallback?: CaretakerProfile
+  ): Promise<{ success: boolean; patient?: PatientProfile; caregiver?: CaretakerProfile; error?: string }> {
     await ensureAuthUser();
-    const cleanId = patientIdentifier.trim().toUpperCase();
+    const raw = patientIdentifier.trim();
+    const cleanId = raw.toUpperCase();
     if (!cleanId) {
-      return { success: false, error: 'Please enter a Patient Key or username.' };
+      return { success: false, error: 'Please enter a Patient Key, Mobile Number, or Username.' };
     }
 
     try {
-      const caregiver = await this.getCaregiver(caregiverId);
+      let caregiver = await this.getCaregiver(caregiverId);
+      if (!caregiver && caretakerFallback) {
+        caregiver = caretakerFallback;
+        await setDoc(doc(db, 'caregivers', caregiver.id), caregiver, { merge: true }).catch(() => {});
+      }
       if (!caregiver) {
-        return { success: false, error: 'Caregiver account not found.' };
+        // Auto-provision basic caregiver document if missing
+        caregiver = {
+          id: caregiverId,
+          fullName: 'Caregiver',
+          username: `caregiver_${caregiverId}`,
+          relation: 'Caregiver',
+          phone: '',
+          pin: '1234',
+          assignedPatientIds: [],
+          caregiverKey: `CG-${caregiverId.slice(-5).toUpperCase()}`,
+        };
+        await setDoc(doc(db, 'caregivers', caregiver.id), caregiver, { merge: true }).catch(() => {});
       }
 
-      // 1. Try to find patient by patientKey, username, phone, or id
-      const pCol = collection(db, 'patients');
-      const snap = await getDocs(pCol);
       let foundPatient: PatientProfile | null = null;
 
-      for (const d of snap.docs) {
-        const p = d.data() as PatientProfile;
-        const pKey = (p.patientKey || '').toUpperCase();
-        const lKey = (p.linkedCaregiverKey || '').toUpperCase();
-        const pUser = (p.username || '').toUpperCase();
-        const pPhone = (p.phone || '').replace(/\D/g, '');
-        const cleanDigits = cleanId.replace(/\D/g, '');
+      // 1. Direct lookup in patientKeys collection (fast & highly reliable)
+      const cleanWithoutPT = cleanId.startsWith('PT-') ? cleanId.replace(/^PT-/, '') : cleanId;
+      const cleanWithPT = cleanId.startsWith('PT-') ? cleanId : `PT-${cleanId}`;
 
-        if (
-          pKey === cleanId ||
-          lKey === cleanId ||
-          pUser === cleanId ||
-          p.id === patientIdentifier ||
-          (cleanDigits.length >= 7 && pPhone.endsWith(cleanDigits))
-        ) {
-          foundPatient = p;
-          break;
+      const keyRefs = [
+        doc(db, 'patientKeys', cleanId),
+        doc(db, 'patientKeys', cleanWithPT),
+        doc(db, 'patientKeys', cleanWithoutPT),
+      ];
+
+      for (const kRef of keyRefs) {
+        try {
+          const kSnap = await getDoc(kRef);
+          if (kSnap.exists()) {
+            const kData = kSnap.data();
+            if (kData?.patientId) {
+              foundPatient = await this.getPatient(kData.patientId);
+              if (foundPatient) break;
+            }
+          }
+        } catch (_) {}
+      }
+
+      // 2. Scan patients collection if not found via direct index
+      if (!foundPatient) {
+        const pCol = collection(db, 'patients');
+        const snap = await getDocs(pCol);
+
+        for (const d of snap.docs) {
+          const p = d.data() as PatientProfile;
+          const pKey = (p.patientKey || '').toUpperCase();
+          const pKeyNoPT = pKey.startsWith('PT-') ? pKey.replace(/^PT-/, '') : pKey;
+          const lKey = (p.linkedCaregiverKey || '').toUpperCase();
+          const pUser = (p.username || '').toUpperCase();
+          const pPhone = (p.phone || '').replace(/\D/g, '');
+          const cleanDigits = cleanId.replace(/\D/g, '');
+          const pName = (p.fullName || '').toUpperCase();
+
+          if (
+            pKey === cleanId ||
+            pKey === cleanWithPT ||
+            pKeyNoPT === cleanWithoutPT ||
+            lKey === cleanId ||
+            pUser === cleanId ||
+            pName === cleanId ||
+            p.id.toUpperCase() === cleanId ||
+            cleanWithPT === `PT-${p.id.toUpperCase()}` ||
+            (cleanDigits.length >= 7 && pPhone.endsWith(cleanDigits))
+          ) {
+            foundPatient = p;
+            break;
+          }
         }
       }
 
-      // Check caregiverKeys collection as fallback
+      // 3. Fallback to caregiverKeys collection
       if (!foundPatient) {
         const keyRef = doc(db, 'caregiverKeys', cleanId);
         const keySnap = await getDoc(keyRef);
@@ -608,16 +701,22 @@ export class FirestoreService {
         };
       }
 
-      // 2. Add to caregiver's assigned list
+      // Ensure patientKey is registered for future instant lookups
+      if (foundPatient.patientKey) {
+        this.registerPatientKeyMapping(foundPatient.patientKey, foundPatient).catch(() => {});
+      }
+
+      // 4. Add to caregiver's assigned list
       const updatedAssigned = Array.from(new Set([...(caregiver.assignedPatientIds || []), foundPatient.id]));
-      await this.updateCaregiver(caregiverId, {
+      await this.updateCaregiver(caregiver.id, {
         assignedPatientIds: updatedAssigned,
       });
+      caregiver.assignedPatientIds = updatedAssigned;
 
-      // 3. Update patient's caregiver information
+      // 5. Update patient's caregiver information
       await this.updatePatient(foundPatient.id, {
         hasCaregiver: true,
-        caregiverName: caregiver.fullName,
+        caregiverName: `${caregiver.fullName} (${caregiver.relation || 'Caregiver'})`,
         caregiverPhone: caregiver.phone,
         linkedCaregiverKey: caregiver.caregiverKey || cleanId,
       });
@@ -627,6 +726,7 @@ export class FirestoreService {
       return {
         success: true,
         patient: refreshedPatient || foundPatient,
+        caregiver,
       };
     } catch (err: any) {
       console.error('Error linking caregiver to patient:', err);
@@ -655,6 +755,53 @@ export class FirestoreService {
         todayCompletedCount: (p.todayCompletedCount || 0) + 1,
         lastActiveAt: new Date().toISOString(),
       });
+    }
+  }
+
+  static async saveAllRoutines(patientId: string, routines: RoutineTask[]): Promise<void> {
+    await ensureAuthUser();
+    if (!patientId) return;
+
+    try {
+      // 1. Clean up old routines no longer in list
+      const rCol = collection(db, 'patients', patientId, 'routines');
+      const snap = await getDocs(rCol);
+      const currentIds = new Set(routines.map((r) => r.id));
+      const deletePromises: Promise<any>[] = [];
+      snap.docs.forEach((d) => {
+        if (!currentIds.has(d.id)) {
+          deletePromises.push(deleteDoc(d.ref));
+        }
+      });
+      await Promise.all(deletePromises);
+
+      // 2. Upsert all current routines
+      const upsertPromises = routines.map((task) => {
+        const taskRef = doc(db, 'patients', patientId, 'routines', task.id);
+        return setDoc(
+          taskRef,
+          {
+            ...task,
+            updatedAt: new Date().toISOString(),
+          },
+          { merge: true }
+        );
+      });
+      await Promise.all(upsertPromises);
+    } catch (err) {
+      console.warn(`Failed to save routines to Firestore for patient ${patientId}:`, err);
+    }
+  }
+
+  static async getRoutines(patientId: string): Promise<RoutineTask[]> {
+    try {
+      await ensureAuthUser();
+      const rCol = collection(db, 'patients', patientId, 'routines');
+      const snap = await getDocs(rCol);
+      return snap.docs.map((d) => d.data() as RoutineTask);
+    } catch (err) {
+      console.warn(`Failed to fetch routines from Firestore for patient ${patientId}:`, err);
+      return [];
     }
   }
 

@@ -21,6 +21,11 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // Cross-device Patient Linking Keys
+    match /patientKeys/{key} {
+      allow read, write: if true;
+    }
+
     // System connectivity ping
     match /system/{docId} {
       allow read, write: if true;

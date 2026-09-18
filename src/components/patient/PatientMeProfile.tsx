@@ -23,6 +23,7 @@ import {
 import { PatientProfile, LanguageCode, TextScale } from '../../types';
 import { translations } from '../../lib/i18n';
 import { OfflineStore } from '../../lib/offlineStore';
+import { FirestoreService } from '../../lib/firestoreService';
 import { EditPatientProfileModal } from './EditPatientProfileModal';
 import { SelectOrAddCaregiverModal } from './SelectOrAddCaregiverModal';
 import { ElderAvatar } from '../common/ElderAvatar';
@@ -89,6 +90,8 @@ export const PatientMeProfile: React.FC<PatientMeProfileProps> = ({
     }
     if (res.patient) {
       onUpdatePatient(res.patient);
+      FirestoreService.registerPatientKeyMapping(clean, res.patient).catch(() => {});
+      FirestoreService.updatePatient(patient.id, { patientKey: clean }).catch(() => {});
     }
     setPatientKeySuccess(`Your Patient Key is now "${clean}"!`);
     setIsEditingPatientKey(false);

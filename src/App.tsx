@@ -69,6 +69,7 @@ import { CaretakerRoutineManager } from './components/caregiver/CaretakerRoutine
 import { AICaretakerCompanion } from './components/ai/AICaretakerCompanion';
 import { HealthcareDashboard } from './components/healthcare/HealthcareDashboard';
 import { AddPatientModal } from './components/caregiver/AddPatientModal';
+import { LinkPatientKeyModal } from './components/caregiver/LinkPatientKeyModal';
 import { LogoutConfirmModal } from './components/common/LogoutConfirmModal';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 import { Bot, Lock } from 'lucide-react';
@@ -150,8 +151,9 @@ export default function App() {
     }
   }, [patientTab, caregiverTab, role, activeGame]);
 
-  // Caregiver Patient Registration Modal
+  // Caregiver Patient Registration & Link Modals
   const [isAddPatientModalOpen, setIsAddPatientModalOpen] = useState<boolean>(false);
+  const [isLinkPatientModalOpen, setIsLinkPatientModalOpen] = useState<boolean>(false);
 
   // Localization
   const [lang, setLang] = useState<LanguageCode>('en');
@@ -194,12 +196,29 @@ export default function App() {
 
   const [patient, setPatient] = useState<PatientProfile>(() => {
     const session = OfflineStore.getAuthSession();
+    const activePatId = OfflineStore.getActivePatientId();
     if (session?.role === 'CAREGIVER') {
-      if (session.patientId) {
-        const found = OfflineStore.getPatient(session.patientId);
+      let candidateId = session.patientId || activePatId;
+      if (!candidateId && session.caretakerId) {
+        const ct = OfflineStore.getCaretakers().find((c) => c.id === session.caretakerId);
+        if (ct?.assignedPatientIds && ct.assignedPatientIds.length > 0) {
+          candidateId = ct.assignedPatientIds[0];
+        }
+      }
+      if (candidateId) {
+        const found = OfflineStore.getPatient(candidateId);
         if (found) return found;
       }
-      // Clean slate if caregiver has no patients assigned
+      if (session.caretakerId) {
+        const ct = OfflineStore.getCaretakers().find((c) => c.id === session.caretakerId);
+        if (ct?.caregiverKey) {
+          const matched = OfflineStore.getPatients().find(
+            (p) => p.linkedCaregiverKey?.toUpperCase() === ct.caregiverKey?.toUpperCase()
+          );
+          if (matched) return matched;
+        }
+      }
+      // Clean slate only if caregiver has truly no linked patients
       return {
         id: '',
         fullName: '',
@@ -216,29 +235,78 @@ export default function App() {
         todayCompletedCount: 0,
       };
     }
-    if (session?.patientId) {
-      const found = OfflineStore.getPatient(session.patientId);
+    const patId = session?.patientId || activePatId;
+    if (patId) {
+      const found = OfflineStore.getPatient(patId);
       if (found) return found;
     }
     return OfflineStore.getPatient() || DEFAULT_PATIENT;
   });
-  const [routine, setRoutine] = useState<RoutineTask[]>(DEFAULT_ROUTINE);
-  const [reminders, setReminders] = useState<ReminderItem[]>(DEFAULT_REMINDERS);
-  const [memories, setMemories] = useState<MemoryMoment[]>(() => OfflineStore.getMemories());
-  const [sessions, setSessions] = useState<GameSessionResult[]>(DEFAULT_RECENT_SESSIONS);
+
+  const [routine, setRoutine] = useState<RoutineTask[]>(() => {
+    const session = OfflineStore.getAuthSession();
+    const activePatId = OfflineStore.getActivePatientId();
+    const pId = session?.patientId || activePatId;
+    if (pId) {
+      const stored = OfflineStore.getRoutine(pId);
+      if (stored && stored.length > 0) return stored;
+    }
+    return DEFAULT_ROUTINE;
+  });
+  const [reminders, setReminders] = useState<ReminderItem[]>(() => {
+    const session = OfflineStore.getAuthSession();
+    const activePatId = OfflineStore.getActivePatientId();
+    const pId = session?.patientId || activePatId;
+    if (pId) {
+      const stored = OfflineStore.getReminders(pId);
+      if (stored && stored.length > 0) return stored;
+    }
+    return DEFAULT_REMINDERS;
+  });
+  const [memories, setMemories] = useState<MemoryMoment[]>(() => {
+    const session = OfflineStore.getAuthSession();
+    const activePatId = OfflineStore.getActivePatientId();
+    const pId = session?.patientId || activePatId;
+    return OfflineStore.getMemories(pId);
+  });
+  const [sessions, setSessions] = useState<GameSessionResult[]>(() => {
+    const session = OfflineStore.getAuthSession();
+    const activePatId = OfflineStore.getActivePatientId();
+    const pId = session?.patientId || activePatId;
+    if (pId) {
+      const stored = OfflineStore.getSessions(pId);
+      if (stored && stored.length > 0) return stored;
+    }
+    return DEFAULT_RECENT_SESSIONS;
+  });
 
   // Initialize data from local storage & register Service Worker
   useEffect(() => {
     const session = OfflineStore.getAuthSession();
     if (session) {
-      if (session.role === 'PATIENT' && session.patientId) {
-        const found = OfflineStore.getPatient(session.patientId);
-        const p = found || DEFAULT_PATIENT;
-        setPatient(p);
-        setRoutine(OfflineStore.getRoutine(p.id));
-        setReminders(OfflineStore.getReminders(p.id));
-        setSessions(OfflineStore.getSessions(p.id));
-        setMemories(OfflineStore.getMemories(p.id));
+      if (session.role === 'PATIENT') {
+        const pId = session.patientId || OfflineStore.getActivePatientId();
+        if (pId) {
+          const found = OfflineStore.getPatient(pId);
+          if (found) {
+            setPatient(found);
+            const r = OfflineStore.getRoutine(found.id);
+            if (r && r.length > 0) setRoutine(r);
+            const rem = OfflineStore.getReminders(found.id);
+            if (rem && rem.length > 0) setReminders(rem);
+            setSessions(OfflineStore.getSessions(found.id));
+            setMemories(OfflineStore.getMemories(found.id));
+          } else {
+            FirestoreService.getPatient(pId).then((p) => {
+              if (p) {
+                OfflineStore.savePatient(p);
+                setPatient(p);
+                setRoutine(OfflineStore.getRoutine(p.id));
+                setReminders(OfflineStore.getReminders(p.id));
+              }
+            }).catch(() => {});
+          }
+        }
       } else if (session.role === 'CAREGIVER') {
         let currentC: CaretakerProfile | null = null;
         if (session.caretakerId) {
@@ -246,19 +314,52 @@ export default function App() {
           currentC = caretakers.find((c) => c.id === session.caretakerId) || null;
           if (currentC) setActiveCaretaker(currentC);
         }
-        if (session.patientId) {
-          const found = OfflineStore.getPatient(session.patientId);
+
+        const candidatePatientId =
+          session.patientId ||
+          OfflineStore.getActivePatientId() ||
+          (currentC?.assignedPatientIds && currentC.assignedPatientIds[0]);
+
+        if (candidatePatientId) {
+          let found = OfflineStore.getPatient(candidatePatientId);
           if (found) {
             setPatient(found);
-            setRoutine(OfflineStore.getRoutine(found.id));
-            setReminders(OfflineStore.getReminders(found.id));
+            const r = OfflineStore.getRoutine(found.id);
+            if (r && r.length > 0) setRoutine(r);
+            const rem = OfflineStore.getReminders(found.id);
+            if (rem && rem.length > 0) setReminders(rem);
             setSessions(OfflineStore.getSessions(found.id));
             setMemories(OfflineStore.getMemories(found.id));
             return;
+          } else {
+            FirestoreService.getPatient(candidatePatientId).then((p) => {
+              if (p) {
+                OfflineStore.savePatient(p);
+                setPatient(p);
+                setRoutine(OfflineStore.getRoutine(p.id));
+                setReminders(OfflineStore.getReminders(p.id));
+                setSessions(OfflineStore.getSessions(p.id));
+                setMemories(OfflineStore.getMemories(p.id));
+              }
+            }).catch(() => {});
+            fetch(`/api/patients/${candidatePatientId}`)
+              .then((r) => r.json())
+              .then((p) => {
+                if (p && p.id) {
+                  OfflineStore.savePatient(p);
+                  setPatient((prev) => (prev.id ? prev : p));
+                  setRoutine(OfflineStore.getRoutine(p.id));
+                }
+              })
+              .catch(() => {});
+            return;
           }
         }
-        // If caregiver has no assigned patients, keep clean slate
-        if (!currentC || !currentC.assignedPatientIds || currentC.assignedPatientIds.length === 0) {
+
+        // Clean slate ONLY if caregiver truly has no patients assigned anywhere
+        const allP = OfflineStore.getPatients();
+        const hasLinkedP = currentC?.caregiverKey && allP.some(p => p.linkedCaregiverKey?.toUpperCase() === currentC!.caregiverKey!.toUpperCase());
+        if (!hasLinkedP && (!currentC || !currentC.assignedPatientIds || currentC.assignedPatientIds.length === 0)) {
           setPatient({
             id: '',
             fullName: '',
@@ -378,28 +479,37 @@ export default function App() {
     const unsubRoutines = FirestoreService.listenToRoutines(patient.id, (realtimeRoutines) => {
       if (realtimeRoutines && realtimeRoutines.length > 0) {
         setRoutine(realtimeRoutines);
-        OfflineStore.saveRoutine(realtimeRoutines);
+        OfflineStore.saveRoutine(realtimeRoutines, patient.id);
         hasInitRoutine = true;
       } else if (!hasInitRoutine) {
         hasInitRoutine = true;
         const local = OfflineStore.getRoutine(patient.id);
         if (local && local.length > 0) {
-          local.forEach((r) => {
-            FirestoreService.updateRoutineTask(patient.id, r).catch(() => {});
-          });
+          FirestoreService.saveAllRoutines(patient.id, local).catch(() => {});
         }
       }
     });
 
+    // Server API routine sync as fast backup
+    fetch(`/api/routines/${patient.id}`)
+      .then((res) => res.json())
+      .then((serverRoutines) => {
+        if (Array.isArray(serverRoutines) && serverRoutines.length > 0) {
+          setRoutine((prev) => (prev.length === 0 ? serverRoutines : prev));
+          OfflineStore.saveRoutine(serverRoutines, patient.id);
+        }
+      })
+      .catch(() => {});
+
     // 4. Real-time Reminders
-    let hasInitRem = false;
+    let hasInitReminders = false;
     const unsubReminders = FirestoreService.listenToReminders(patient.id, (realtimeReminders) => {
       if (realtimeReminders && realtimeReminders.length > 0) {
         setReminders(realtimeReminders);
-        OfflineStore.saveReminders(realtimeReminders);
-        hasInitRem = true;
-      } else if (!hasInitRem) {
-        hasInitRem = true;
+        OfflineStore.saveReminders(realtimeReminders, patient.id);
+        hasInitReminders = true;
+      } else if (!hasInitReminders) {
+        hasInitReminders = true;
         const local = OfflineStore.getReminders(patient.id);
         if (local && local.length > 0) {
           local.forEach((r) => {
@@ -408,6 +518,16 @@ export default function App() {
         }
       }
     });
+
+    fetch(`/api/reminders/${patient.id}`)
+      .then((res) => res.json())
+      .then((serverReminders) => {
+        if (Array.isArray(serverReminders) && serverReminders.length > 0) {
+          setReminders((prev) => (prev.length === 0 ? serverReminders : prev));
+          OfflineStore.saveReminders(serverReminders, patient.id);
+        }
+      })
+      .catch(() => {});
 
     // 5. Real-time Game Activity Sessions
     const unsubSessions = FirestoreService.listenToSessions(patient.id, (realtimeSessions) => {
@@ -502,41 +622,69 @@ export default function App() {
     }, 1200);
   };
 
+  // Centralized Routine Updates (Caregiver & Patient with cloud and server sync)
+  const handleUpdateRoutine = (newRoutine: RoutineTask[], targetPatientId?: string) => {
+    const pId = targetPatientId || patient?.id || OfflineStore.getActivePatientId();
+    setRoutine(newRoutine);
+    if (pId) {
+      OfflineStore.saveRoutine(newRoutine, pId);
+      FirestoreService.saveAllRoutines(pId, newRoutine).catch((err) => {
+        console.warn('Error saving routines to Firestore:', err);
+      });
+      fetch(`/api/routines/${pId}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newRoutine),
+      }).catch((err) => {
+        console.warn('Error saving routines to server:', err);
+      });
+    } else {
+      OfflineStore.saveRoutine(newRoutine);
+    }
+  };
+
   // Routine Checklist Toggle & Patient Self-Management
   const handleToggleRoutineTask = (taskId: string) => {
     const updated = routine.map((r) =>
       r.id === taskId ? { ...r, completed: !r.completed } : r
     );
-    setRoutine(updated);
-    OfflineStore.saveRoutine(updated);
-    const targetTask = updated.find((r) => r.id === taskId);
-    if (patient && patient.id && targetTask) {
-      FirestoreService.updateRoutineTask(patient.id, targetTask).catch((err) => {
-        console.warn('Error syncing routine task to Firestore:', err);
-      });
-    }
+    handleUpdateRoutine(updated);
   };
 
   const handleAddPatientTask = (task: RoutineTask) => {
     const updated = [...routine, task];
-    setRoutine(updated);
-    OfflineStore.saveRoutine(updated);
-    if (patient && patient.id) {
-      FirestoreService.updateRoutineTask(patient.id, task).catch((err) => {
-        console.warn('Error adding routine task to Firestore:', err);
-      });
-    }
+    handleUpdateRoutine(updated);
   };
 
   const handleDeleteRoutineTask = (taskId: string) => {
     const updated = routine.filter((r) => r.id !== taskId);
-    setRoutine(updated);
-    OfflineStore.saveRoutine(updated);
-    if (patient && patient.id) {
-      FirestoreService.deleteRoutineTask(patient.id, taskId).catch((err) => {
-        console.warn('Error deleting routine task from Firestore:', err);
-      });
-    }
+    handleUpdateRoutine(updated);
+  };
+
+  // Patient Key Updates (registered across client, Firestore, and backend DB)
+  const handleUpdatePatientKey = async (newKey: string) => {
+    if (!patient || !patient.id) return;
+    const cleanKey = newKey.trim().toUpperCase();
+    if (!cleanKey) return;
+
+    const updatedPatient: PatientProfile = {
+      ...patient,
+      patientKey: cleanKey,
+    };
+    setPatient(updatedPatient);
+    OfflineStore.savePatient(updatedPatient);
+
+    FirestoreService.registerPatientKeyMapping(cleanKey, updatedPatient).catch((err) => {
+      console.warn('Error registering key mapping in Firestore:', err);
+    });
+    FirestoreService.updatePatient(patient.id, { patientKey: cleanKey }).catch((err) => {
+      console.warn('Error updating patientKey in Firestore:', err);
+    });
+    fetch(`/api/patients/${patient.id}/key`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: cleanKey }),
+    }).catch(() => {});
   };
 
   // Reminders Toggle & Management
@@ -723,6 +871,10 @@ export default function App() {
     setPatient(selectedP);
     if (selectedP.id) {
       OfflineStore.setActivePatientId(selectedP.id);
+      const session = OfflineStore.getAuthSession();
+      if (session) {
+        OfflineStore.saveAuthSession({ ...session, patientId: selectedP.id });
+      }
       setRoutine(OfflineStore.getRoutine(selectedP.id));
       setMemories(OfflineStore.getMemories(selectedP.id));
       setSessions(OfflineStore.getSessions(selectedP.id));
@@ -1170,7 +1322,7 @@ export default function App() {
                       reminders={reminders}
                       sessions={sessions}
                       routine={routine}
-                      onUpdateRoutine={(newRoutine) => setRoutine(newRoutine)}
+                      onUpdateRoutine={handleUpdateRoutine}
                       lang={lang}
                       onNavigateTab={(tab) => setCaregiverTab(tab as any)}
                       caretaker={activeCaretaker}
@@ -1190,19 +1342,23 @@ export default function App() {
                   <CaretakerRoutineManager
                     patient={patient}
                     routine={routine}
-                    onUpdateRoutine={(newRoutine) => setRoutine(newRoutine)}
+                    onUpdateRoutine={handleUpdateRoutine}
                   />
                 )}
 
                 {caregiverTab === 'patient_detail' && (
                   <CaregiverPatientDetail
                     patient={patient}
+                    allPatients={caregiverPatients}
                     sessions={sessions}
                     routine={routine}
-                    onUpdateRoutine={(newRoutine) => setRoutine(newRoutine)}
+                    onUpdateRoutine={handleUpdateRoutine}
                     lang={lang}
                     onLockToPatient={handleLockToPatient}
                     onAddNewPatient={() => setIsAddPatientModalOpen(true)}
+                    onOpenLinkPatientModal={() => setIsLinkPatientModalOpen(true)}
+                    onSelectPatient={handleSelectPatient}
+                    onUpdatePatientKey={handleUpdatePatientKey}
                   />
                 )}
 
@@ -1388,6 +1544,14 @@ export default function App() {
         onSave={handleSaveNewPatient}
         currentCaretaker={activeCaretaker}
         lang={lang}
+      />
+
+      {/* Link Existing Patient by Key Modal */}
+      <LinkPatientKeyModal
+        isOpen={isLinkPatientModalOpen}
+        onClose={() => setIsLinkPatientModalOpen(false)}
+        caretakerId={activeCaretaker?.id}
+        onPatientLinked={handleSelectPatient}
       />
 
       {/* Logout Confirmation Prompt Modal */}

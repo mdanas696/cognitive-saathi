@@ -325,15 +325,19 @@ const stripStockAvatar = (url?: string): string => {
 };
 
 const sanitizePatient = (p: PatientProfile): PatientProfile => {
+  let deterministicKey = p.patientKey;
+  if (!deterministicKey) {
+    const cleanId = (p.id || '').replace(/^patient-/, '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 6).toUpperCase();
+    const namePart = (p.username || p.preferredName || p.fullName || 'PT')
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, '')
+      .slice(0, 4);
+    deterministicKey = `PT-${namePart || 'USER'}${cleanId || '01'}`;
+  }
   return {
     ...p,
     avatarUrl: stripStockAvatar(p.avatarUrl),
-    patientKey:
-      p.patientKey ||
-      `PT-${(p.username || p.preferredName || 'PATIENT')
-        .toUpperCase()
-        .replace(/[^A-Z0-9]/g, '')
-        .slice(0, 4)}${p.age || Math.floor(10 + Math.random() * 89)}`,
+    patientKey: deterministicKey,
   };
 };
 
@@ -926,13 +930,19 @@ export class OfflineStore {
     const cleanUpper = raw.toUpperCase();
     const cleanDigits = raw.replace(/\D/g, '');
     const cleanLower = raw.toLowerCase();
+    const cleanWithoutPT = cleanUpper.startsWith('PT-') ? cleanUpper.replace(/^PT-/, '') : cleanUpper;
+    const cleanWithPT = cleanUpper.startsWith('PT-') ? cleanUpper : `PT-${cleanUpper}`;
 
     const allPatients = this.getPatients();
     const patient = allPatients.find((p) => {
-      if (p.patientKey && p.patientKey.toUpperCase() === cleanUpper) return true;
-      if (p.id === raw || p.id.toUpperCase() === cleanUpper) return true;
+      const pKey = (p.patientKey || '').toUpperCase();
+      const pKeyWithoutPT = pKey.startsWith('PT-') ? pKey.replace(/^PT-/, '') : pKey;
+
+      if (pKey && (pKey === cleanUpper || pKey === cleanWithPT || pKeyWithoutPT === cleanWithoutPT || pKeyWithoutPT === cleanUpper)) return true;
+      if (p.id === raw || p.id.toUpperCase() === cleanUpper || `PT-${p.id.toUpperCase()}` === cleanWithPT) return true;
       if (p.username && p.username.toLowerCase() === cleanLower) return true;
       if (p.fullName && p.fullName.toLowerCase() === cleanLower) return true;
+      if (p.preferredName && p.preferredName.toLowerCase() === cleanLower) return true;
       if (cleanDigits && p.phone) {
         const pDigits = p.phone.replace(/\D/g, '');
         if (pDigits === cleanDigits || pDigits.endsWith(cleanDigits) || cleanDigits.endsWith(pDigits)) return true;
@@ -977,13 +987,19 @@ export class OfflineStore {
     const cleanUpper = raw.toUpperCase();
     const cleanDigits = raw.replace(/\D/g, '');
     const cleanLower = raw.toLowerCase();
+    const cleanWithoutPT = cleanUpper.startsWith('PT-') ? cleanUpper.replace(/^PT-/, '') : cleanUpper;
+    const cleanWithPT = cleanUpper.startsWith('PT-') ? cleanUpper : `PT-${cleanUpper}`;
 
     const allPatients = this.getPatients();
     const patient = allPatients.find((p) => {
-      if (p.patientKey && p.patientKey.toUpperCase() === cleanUpper) return true;
-      if (p.id === raw || p.id.toUpperCase() === cleanUpper) return true;
+      const pKey = (p.patientKey || '').toUpperCase();
+      const pKeyWithoutPT = pKey.startsWith('PT-') ? pKey.replace(/^PT-/, '') : pKey;
+
+      if (pKey && (pKey === cleanUpper || pKey === cleanWithPT || pKeyWithoutPT === cleanWithoutPT || pKeyWithoutPT === cleanUpper)) return true;
+      if (p.id === raw || p.id.toUpperCase() === cleanUpper || `PT-${p.id.toUpperCase()}` === cleanWithPT) return true;
       if (p.username && p.username.toLowerCase() === cleanLower) return true;
       if (p.fullName && p.fullName.toLowerCase() === cleanLower) return true;
+      if (p.preferredName && p.preferredName.toLowerCase() === cleanLower) return true;
       if (cleanDigits && p.phone) {
         const pDigits = p.phone.replace(/\D/g, '');
         if (pDigits === cleanDigits || pDigits.endsWith(cleanDigits) || cleanDigits.endsWith(pDigits)) return true;

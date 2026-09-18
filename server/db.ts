@@ -62,6 +62,15 @@ export class ServerDB {
   static ensureMutualConsistency(db: DatabaseSchema): boolean {
     let changed = false;
     for (const patient of db.patients) {
+      if (!patient.patientKey) {
+        const cleanId = (patient.id || '').replace(/^patient-/, '').replace(/[^a-zA-Z0-9]/g, '').slice(0, 6).toUpperCase();
+        const namePart = (patient.username || patient.preferredName || patient.fullName || 'PT')
+          .toUpperCase()
+          .replace(/[^A-Z0-9]/g, '')
+          .slice(0, 4);
+        patient.patientKey = `PT-${namePart || 'USER'}${cleanId || '01'}`;
+        changed = true;
+      }
       if (patient.linkedCaregiverKey) {
         const keyClean = patient.linkedCaregiverKey.trim().toUpperCase();
         const ct = db.caretakers.find((c) => (c.caregiverKey || '').trim().toUpperCase() === keyClean);
@@ -129,14 +138,23 @@ export class ServerDB {
 
   static findPatient(identifier: string): PatientProfile | undefined {
     const db = this.ensureDbExists();
-    const clean = identifier.trim().toLowerCase();
-    const cleanDigits = identifier.replace(/\D/g, '');
+    const raw = identifier.trim();
+    const cleanLower = raw.toLowerCase();
+    const cleanUpper = raw.toUpperCase();
+    const cleanDigits = raw.replace(/\D/g, '');
+    const cleanWithoutPT = cleanUpper.startsWith('PT-') ? cleanUpper.replace(/^PT-/, '') : cleanUpper;
+    const cleanWithPT = cleanUpper.startsWith('PT-') ? cleanUpper : `PT-${cleanUpper}`;
 
     return db.patients.find((p) => {
-      if (p.id.toLowerCase() === clean) return true;
-      if (p.patientKey && p.patientKey.toLowerCase() === clean) return true;
-      if (p.username && p.username.toLowerCase() === clean) return true;
-      if (p.fullName.toLowerCase() === clean) return true;
+      const pKey = (p.patientKey || '').toUpperCase();
+      const pKeyWithoutPT = pKey.startsWith('PT-') ? pKey.replace(/^PT-/, '') : pKey;
+
+      if (p.id.toLowerCase() === cleanLower || p.id.toUpperCase() === cleanUpper) return true;
+      if (pKey && (pKey === cleanUpper || pKey === cleanWithPT || pKeyWithoutPT === cleanWithoutPT || pKeyWithoutPT === cleanUpper)) return true;
+      if (cleanWithPT === `PT-${p.id.toUpperCase()}`) return true;
+      if (p.username && p.username.toLowerCase() === cleanLower) return true;
+      if (p.fullName && p.fullName.toLowerCase() === cleanLower) return true;
+      if (p.preferredName && p.preferredName.toLowerCase() === cleanLower) return true;
       if (p.phone) {
         const pDigits = p.phone.replace(/\D/g, '');
         if (pDigits && cleanDigits && (pDigits === cleanDigits || pDigits.endsWith(cleanDigits) || cleanDigits.endsWith(pDigits))) {

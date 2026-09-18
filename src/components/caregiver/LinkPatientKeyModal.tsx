@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { KeyRound, ShieldCheck, CheckCircle2, AlertTriangle, X, ArrowRight } from 'lucide-react';
+import { KeyRound, AlertTriangle, X, ArrowRight } from 'lucide-react';
 import { OfflineStore } from '../../lib/offlineStore';
+import { FirestoreService } from '../../lib/firestoreService';
 import { PatientProfile } from '../../types';
 
 interface LinkPatientKeyModalProps {
@@ -36,6 +37,31 @@ export const LinkPatientKeyModal: React.FC<LinkPatientKeyModalProps> = ({
 
     const currentCaretakerId = caretakerId || OfflineStore.getActiveCaretakerId() || 'caretaker-1';
     try {
+      // 1. Try Firestore direct cross-device cloud linking first
+      try {
+        const ctProfile = OfflineStore.getCaretakers().find((c) => c.id === currentCaretakerId);
+        const fsResult = await FirestoreService.linkCaregiverToPatient(currentCaretakerId, trimmed, ctProfile);
+        if (fsResult.success && fsResult.patient) {
+          OfflineStore.savePatient(fsResult.patient);
+          if (fsResult.caregiver) {
+            const allC = OfflineStore.getCaretakers();
+            const exists = allC.some((c) => c.id === fsResult.caregiver!.id);
+            const updatedC = exists
+              ? allC.map((c) => (c.id === fsResult.caregiver!.id ? fsResult.caregiver! : c))
+              : [...allC, fsResult.caregiver!];
+            OfflineStore.saveCaretakers(updatedC);
+          }
+          OfflineStore.setActivePatientId(fsResult.patient.id);
+          setIsLoading(false);
+          onPatientLinked(fsResult.patient);
+          onClose();
+          return;
+        }
+      } catch (fsErr) {
+        console.warn('Firestore direct link attempt error:', fsErr);
+      }
+
+      // 2. Server API + Local Store fallback
       const result = await OfflineStore.linkCaregiverToPatientByKeyAsync(currentCaretakerId, trimmed);
       setIsLoading(false);
 
@@ -44,6 +70,7 @@ export const LinkPatientKeyModal: React.FC<LinkPatientKeyModalProps> = ({
         return;
       }
 
+      OfflineStore.setActivePatientId(result.patient.id);
       onPatientLinked(result.patient);
       onClose();
     } catch (err: any) {

@@ -26,6 +26,7 @@ import { LanguageCode, PatientProfile, CaretakerProfile } from '../../types';
 import { translations } from '../../lib/i18n';
 import { OfflineStore } from '../../lib/offlineStore';
 import { VoiceService } from '../../lib/voiceService';
+import { FirestoreService } from '../../lib/firestoreService';
 import { PhotoUploader } from '../common/PhotoUploader';
 import { LanguageDropdown } from '../common/LanguageDropdown';
 import { ForgotPinModal } from './ForgotPinModal';
@@ -147,7 +148,28 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     setIsSubmitting(true);
 
     try {
-      // 1. Try server-side authentication API first
+      // 1. Try Firestore shared backend first
+      try {
+        const firestorePatient = await FirestoreService.loginPatient(inputTrimmed, patientPassword.trim());
+        if (firestorePatient) {
+          OfflineStore.saveAuthSession({
+            role: 'PATIENT',
+            patientId: firestorePatient.id,
+            userName: firestorePatient.username || firestorePatient.fullName,
+            expiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000,
+          });
+          OfflineStore.savePatient(firestorePatient);
+          OfflineStore.setActivePatientId(firestorePatient.id);
+
+          VoiceService.speak(`Welcome back, ${firestorePatient.preferredName || firestorePatient.fullName}. Entering your space.`, lang);
+          onLoginPatient(firestorePatient);
+          return;
+        }
+      } catch (fErr) {
+        console.warn('Firestore patient login check:', fErr);
+      }
+
+      // 2. Try server-side authentication API
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -331,7 +353,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         hasCaregiver: Boolean(cleanLinkedCaregiverKey),
       };
 
-      // 1. Send registration to Server Database
+      // 1. Save patient to Firestore shared backend
+      try {
+        await FirestoreService.registerPatient(newPatient, regPassword.trim());
+      } catch (fErr) {
+        console.warn('Firestore patient registration:', fErr);
+      }
+
+      // 2. Send registration to Server Database
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -404,6 +433,33 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
     setIsSubmitting(true);
 
     try {
+      // 1. Try Firestore shared backend first
+      try {
+        const firestoreCaregiver = await FirestoreService.loginCaregiver(inputTrimmed, caregiverPin.trim());
+        if (firestoreCaregiver) {
+          let assignedPatient: PatientProfile | null = null;
+          if (firestoreCaregiver.assignedPatientIds && firestoreCaregiver.assignedPatientIds.length > 0) {
+            assignedPatient = await FirestoreService.getPatient(firestoreCaregiver.assignedPatientIds[0]);
+          }
+
+          OfflineStore.saveAuthSession({
+            role: 'CAREGIVER',
+            caretakerId: firestoreCaregiver.id,
+            patientId: assignedPatient?.id || '',
+            userName: firestoreCaregiver.username || firestoreCaregiver.fullName,
+            expiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000,
+          });
+          OfflineStore.addCaretaker(firestoreCaregiver);
+          OfflineStore.setActiveCaretakerId(firestoreCaregiver.id);
+
+          onLoginCaregiver(firestoreCaregiver, assignedPatient);
+          return;
+        }
+      } catch (fErr) {
+        console.warn('Firestore caregiver login check:', fErr);
+      }
+
+      // 2. Try server-side authentication API
       const res = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -546,7 +602,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         assignedPatientIds: [],
       };
 
-      // 1. Send registration to Server Database
+      // 1. Save caregiver to Firestore shared backend
+      try {
+        await FirestoreService.registerCaregiver(newCaretaker, regCaregiverPin.trim());
+      } catch (fErr) {
+        console.warn('Firestore caregiver registration:', fErr);
+      }
+
+      // 2. Send registration to Server Database
       const res = await fetch('/api/auth/register', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1053,46 +1116,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                         </div>
                       </div>
                     </div>
-
-                    {/* Patient Key Setting */}
-                    <div className="p-3.5 rounded-2xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/60 space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <label htmlFor="reg-patient-key" className="text-xs font-bold text-amber-900 dark:text-amber-200 flex items-center gap-1.5">
-                          <KeyRound className="w-3.5 h-3.5 text-amber-700 dark:text-amber-400" />
-                          <span>Set Your Patient Key (Personal or Auto)</span>
-                        </label>
-                        <button
-                          type="button"
-                          onClick={() => setRegPatientKey(`PT-${Math.floor(100000 + Math.random() * 900000)}`)}
-                          className="text-[11px] text-amber-800 dark:text-amber-300 font-bold underline cursor-pointer"
-                        >
-                          🎲 Randomize
-                        </button>
-                      </div>
-                      <input
-                        id="reg-patient-key"
-                        type="text"
-                        value={regPatientKey}
-                        onChange={(e) => setRegPatientKey(e.target.value.toUpperCase())}
-                        placeholder="e.g. PT-DAD72, AMMA-CARE (leave blank to auto-generate)"
-                        className="w-full px-3 py-2 rounded-xl border border-amber-300 dark:border-amber-700 text-xs font-mono font-bold tracking-wider text-amber-950 dark:text-amber-100 uppercase bg-white dark:bg-[#121820]"
-                      />
-                    </div>
-
-                    {/* Connect with Caregiver Key (Optional) */}
-                    <div className="p-3.5 rounded-2xl bg-teal-50/70 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800 space-y-1">
-                      <label htmlFor="reg-patient-cg-key" className="text-xs font-bold text-teal-900 dark:text-teal-200 block">
-                        Link Caregiver with Caregiver Key (Optional)
-                      </label>
-                      <input
-                        id="reg-patient-cg-key"
-                        type="text"
-                        value={regPatientLinkedCaregiverKey}
-                        onChange={(e) => setRegPatientLinkedCaregiverKey(e.target.value.toUpperCase())}
-                        placeholder="e.g. CG-CARE88 (if caregiver gave you their key)"
-                        className="w-full px-3 py-2 rounded-xl border border-teal-300 dark:border-teal-700 text-xs font-mono font-bold tracking-wider text-teal-950 dark:text-teal-100 uppercase bg-white dark:bg-[#121820]"
-                      />
-                    </div>
                   </div>
 
                   <button
@@ -1349,46 +1372,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                           />
                         </div>
                       </div>
-                    </div>
-
-                    {/* Caregiver Set Own Key */}
-                    <div className="p-3.5 rounded-2xl bg-teal-50/70 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 space-y-1.5">
-                      <div className="flex items-center justify-between">
-                        <label htmlFor="reg-cg-key" className="text-xs font-bold text-teal-900 dark:text-teal-200 flex items-center gap-1.5">
-                          <KeyRound className="w-3.5 h-3.5 text-teal-700 dark:text-teal-400" />
-                          <span>Set Your Caregiver Key (Personal or Auto)</span>
-                        </label>
-                        <button
-                          type="button"
-                          onClick={() => setRegCaregiverKey(`CG-${Math.floor(100000 + Math.random() * 900000)}`)}
-                          className="text-[11px] text-teal-800 dark:text-teal-300 font-bold underline cursor-pointer"
-                        >
-                          🎲 Randomize
-                        </button>
-                      </div>
-                      <input
-                        id="reg-cg-key"
-                        type="text"
-                        value={regCaregiverKey}
-                        onChange={(e) => setRegCaregiverKey(e.target.value.toUpperCase())}
-                        placeholder="e.g. CG-CARE88, PRIYA-CARE (leave blank to auto-generate)"
-                        className="w-full px-3.5 py-2 rounded-xl border border-teal-300 dark:border-teal-700 text-xs font-mono font-bold tracking-wider text-teal-950 dark:text-teal-100 uppercase bg-white dark:bg-[#121820]"
-                      />
-                    </div>
-
-                    {/* Optional Link Patient */}
-                    <div className="p-3.5 rounded-2xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 space-y-1">
-                      <label htmlFor="reg-cg-patient-key" className="text-xs font-bold text-amber-900 dark:text-amber-200 block">
-                        Link Existing Patient by Patient Key (Optional)
-                      </label>
-                      <input
-                        id="reg-cg-patient-key"
-                        type="text"
-                        value={regCaregiverLinkPatientKey}
-                        onChange={(e) => setRegCaregiverLinkPatientKey(e.target.value.toUpperCase())}
-                        placeholder="e.g. PT-123456 (if patient has a key)"
-                        className="w-full px-3.5 py-2 rounded-xl border border-amber-300 dark:border-amber-700 text-xs font-mono font-bold tracking-wider text-amber-950 dark:text-amber-100 uppercase bg-white dark:bg-[#121820]"
-                      />
                     </div>
                   </div>
 

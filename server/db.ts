@@ -14,66 +14,9 @@ export interface DatabaseSchema {
 const DB_DIR = path.join(process.cwd(), 'data');
 const DB_PATH = path.join(DB_DIR, 'database.json');
 
-// Default initial data for demo/startup
-const INITIAL_PATIENTS: PatientProfile[] = [
-  {
-    id: 'patient-senior-1',
-    fullName: 'Ramesh Sharma',
-    preferredName: 'Ramesh',
-    username: 'ramesh',
-    password: 'password123',
-    pin: '5678',
-    patientKey: 'PT-RAMESH72',
-    linkedCaregiverKey: 'CG-CARE88',
-    age: 72,
-    region: 'Guwahati, Assam',
-    state: 'Assam',
-    preferredLanguage: 'en',
-    caregiverName: 'Priya Sharma (Daughter)',
-    caregiverPhone: '9435012345',
-    avatarUrl: '',
-    dailyStreak: 0,
-    todayCompletedCount: 0,
-    phone: '9435011111',
-    hasCaregiver: true,
-  },
-  {
-    id: 'patient-independent-2',
-    fullName: 'Biren Kalita',
-    preferredName: 'Biren',
-    username: 'biren',
-    password: 'password123',
-    pin: '4321',
-    patientKey: 'PT-BIREN76',
-    age: 76,
-    region: 'Guwahati, Assam',
-    state: 'Assam',
-    preferredLanguage: 'as',
-    caregiverName: 'Self',
-    caregiverPhone: '9435022222',
-    avatarUrl: '',
-    dailyStreak: 0,
-    todayCompletedCount: 0,
-    phone: '9435022222',
-    hasCaregiver: false,
-  },
-];
-
-const INITIAL_CARETAKERS: CaretakerProfile[] = [
-  {
-    id: 'caretaker-priya',
-    fullName: 'Priya Sharma',
-    username: 'priya',
-    password: 'password123',
-    phone: '9435012345',
-    email: 'priya.care@cognitivesaathi.org',
-    relation: 'Daughter & Primary Caregiver',
-    pin: '5678',
-    caregiverKey: 'CG-CARE88',
-    avatarUrl: '',
-    assignedPatientIds: ['patient-senior-1'],
-  },
-];
+// Default initial data: brand new empty database
+const INITIAL_PATIENTS: PatientProfile[] = [];
+const INITIAL_CARETAKERS: CaretakerProfile[] = [];
 
 export class ServerDB {
   private static cache: DatabaseSchema | null = null;

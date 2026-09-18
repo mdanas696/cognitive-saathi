@@ -1,66 +1,24 @@
 import { GameSessionResult, RoutineTask, ReminderItem, PatientProfile, CaretakerProfile, SyncEvent, MemoryMoment, GameDefinition, AuthSession, TabNavigationState } from '../types';
 
-export const DEFAULT_PATIENTS: PatientProfile[] = [
-  {
-    id: 'patient-senior-1',
-    fullName: 'Ramesh Sharma',
-    preferredName: 'Ramesh',
-    username: 'ramesh',
-    password: 'password123',
-    pin: '5678',
-    patientKey: 'PT-RAMESH72',
-    linkedCaregiverKey: 'CG-CARE88',
-    age: 72,
-    region: 'Guwahati, Assam',
-    state: 'Assam',
-    preferredLanguage: 'en',
-    caregiverName: 'Priya Sharma (Daughter)',
-    caregiverPhone: '+91 94350 12345',
-    avatarUrl: '',
-    dailyStreak: 0,
-    todayCompletedCount: 0,
-    phone: '9435011111',
-    hasCaregiver: true,
-  },
-  {
-    id: 'patient-independent-2',
-    fullName: 'Biren Kalita',
-    preferredName: 'Biren',
-    username: 'biren',
-    password: 'password123',
-    pin: '4321',
-    patientKey: 'PT-BIREN76',
-    age: 76,
-    region: 'Guwahati, Assam',
-    state: 'Assam',
-    preferredLanguage: 'as',
-    caregiverName: 'Self',
-    caregiverPhone: '+91 94350 22222',
-    avatarUrl: '',
-    dailyStreak: 0,
-    todayCompletedCount: 0,
-    phone: '9435022222',
-    hasCaregiver: false,
-  },
-];
+export const DEFAULT_PATIENTS: PatientProfile[] = [];
 
-export const DEFAULT_PATIENT: PatientProfile = DEFAULT_PATIENTS[0];
+export const DEFAULT_PATIENT: PatientProfile = {
+  id: '',
+  fullName: '',
+  preferredName: '',
+  username: '',
+  age: 0,
+  region: '',
+  state: '',
+  preferredLanguage: 'en',
+  caregiverName: '',
+  caregiverPhone: '',
+  avatarUrl: '',
+  dailyStreak: 0,
+  todayCompletedCount: 0,
+};
 
-export const DEFAULT_CARETAKERS: CaretakerProfile[] = [
-  {
-    id: 'caretaker-priya',
-    fullName: 'Priya Sharma',
-    username: 'priya',
-    password: 'password123',
-    phone: '+91 94350 12345',
-    email: 'priya.care@cognitivesaathi.org',
-    relation: 'Daughter & Primary Caregiver',
-    pin: '5678',
-    caregiverKey: 'CG-CARE88',
-    avatarUrl: '',
-    assignedPatientIds: ['patient-senior-1'],
-  },
-];
+export const DEFAULT_CARETAKERS: CaretakerProfile[] = [];
 
 export const DEFAULT_GAMES: GameDefinition[] = [
   {
@@ -532,6 +490,43 @@ export class OfflineStore {
       sessionStorage.removeItem(STORAGE_KEYS.TAB_STATE);
     } catch (e) {
       console.warn('Tab navigation state clear error:', e);
+    }
+  }
+
+  static makeDataZero(): void {
+    try {
+      if (typeof window !== 'undefined') {
+        localStorage.clear();
+        if (window.sessionStorage) {
+          sessionStorage.clear();
+        }
+      }
+    } catch (e) {
+      console.warn('makeDataZero error:', e);
+    }
+  }
+
+  static cleanLegacyMockData(): void {
+    try {
+      if (typeof window === 'undefined') return;
+      const patientsRaw = localStorage.getItem(STORAGE_KEYS.PATIENTS_LIST);
+      if (patientsRaw) {
+        const list = JSON.parse(patientsRaw);
+        if (Array.isArray(list)) {
+          const filtered = list.filter((p: any) => p && p.id !== 'patient-senior-1' && p.id !== 'patient-independent-2');
+          localStorage.setItem(STORAGE_KEYS.PATIENTS_LIST, JSON.stringify(filtered));
+        }
+      }
+      const caretakersRaw = localStorage.getItem(STORAGE_KEYS.CARETAKERS_LIST);
+      if (caretakersRaw) {
+        const list = JSON.parse(caretakersRaw);
+        if (Array.isArray(list)) {
+          const filtered = list.filter((c: any) => c && c.id !== 'caretaker-priya');
+          localStorage.setItem(STORAGE_KEYS.CARETAKERS_LIST, JSON.stringify(filtered));
+        }
+      }
+    } catch (e) {
+      // ignore
     }
   }
 

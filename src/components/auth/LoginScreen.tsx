@@ -129,7 +129,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
       return;
     }
 
-    // Check if input is a mobile number attempt (contains digits or is a phone number format)
     const digitsOnly = inputTrimmed.replace(/\D/g, '');
     const isPhoneAttempt = /^[0-9+\s()-]+$/.test(inputTrimmed) && digitsOnly.length > 0;
     if (isPhoneAttempt) {
@@ -161,7 +160,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           OfflineStore.savePatient(firestorePatient);
           OfflineStore.setActivePatientId(firestorePatient.id);
 
-          // Auto-sync with Caregiver in Firestore if caregiver key is set
           if (firestorePatient.linkedCaregiverKey) {
             FirestoreService.linkPatientWithCaregiverKey(
               firestorePatient.id,
@@ -177,84 +175,49 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         console.warn('Firestore patient login check:', fErr);
       }
 
-      // 2. Try server-side authentication API
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          identifier: inputTrimmed,
-          password: patientPassword.trim(),
-          role: 'PATIENT',
-        }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        const target: PatientProfile = data.patient;
-
-        // Persist session across refresh and re-open (1 year expiry)
-        OfflineStore.saveAuthSession({
-          role: 'PATIENT',
-          patientId: target.id,
-          userName: target.username || target.fullName,
-          expiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000,
-        });
-        OfflineStore.savePatient(target);
-        OfflineStore.setActivePatientId(target.id);
-
-        if (target.linkedCaregiverKey) {
-          FirestoreService.linkPatientWithCaregiverKey(target.id, target.linkedCaregiverKey).catch(() => {});
-        }
-
-        VoiceService.speak(`Welcome back, ${target.preferredName || target.fullName}. Entering your space.`, lang);
-        onLoginPatient(target);
-        return;
-      }
-
-      // If server returned a 401 or 400 error, read error
-      if (res.status === 401 || res.status === 400) {
-        const err = await res.json();
-        // Fallback to local offline check before failing
-        const cleanDigits = inputTrimmed.replace(/\D/g, '');
-        const inputLower = inputTrimmed.toLowerCase();
-        const localPatients = OfflineStore.getPatients();
-
-        const localTarget = localPatients.find((p) => {
-          const pUsername = (p.username || '').trim().toLowerCase();
-          const pPhoneDigits = (p.phone || '').trim().replace(/\D/g, '');
-          const pFullName = p.fullName.trim().toLowerCase();
-          return (
-            (cleanDigits.length >= 10 && pPhoneDigits.endsWith(cleanDigits)) ||
-            pUsername === inputLower ||
-            pFullName === inputLower
-          );
+      // 2. Try server-side authentication API (optional on Vercel)
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            identifier: inputTrimmed,
+            password: patientPassword.trim(),
+            role: 'PATIENT',
+          }),
         });
 
-        if (localTarget && (localTarget.password === patientPassword.trim() || localTarget.pin === patientPassword.trim())) {
+        if (res.ok) {
+          const data = await res.json();
+          const target: PatientProfile = data.patient;
+
           OfflineStore.saveAuthSession({
             role: 'PATIENT',
-            patientId: localTarget.id,
-            userName: localTarget.username || localTarget.fullName,
+            patientId: target.id,
+            userName: target.username || target.fullName,
             expiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000,
           });
-          OfflineStore.setActivePatientId(localTarget.id);
-          VoiceService.speak(`Welcome, ${localTarget.preferredName || localTarget.fullName}. Entering your space.`, lang);
-          onLoginPatient(localTarget);
+          OfflineStore.savePatient(target);
+          OfflineStore.setActivePatientId(target.id);
+
+          if (target.linkedCaregiverKey) {
+            FirestoreService.linkPatientWithCaregiverKey(target.id, target.linkedCaregiverKey).catch(() => {});
+          }
+
+          VoiceService.speak(`Welcome back, ${target.preferredName || target.fullName}. Entering your space.`, lang);
+          onLoginPatient(target);
           return;
         }
-
-        setErrorMsg(err.error || 'Invalid credentials. Please check your mobile number and password.');
-        return;
+      } catch (srvErr) {
+        console.warn('Server offline on Vercel, trying local store:', srvErr);
       }
 
-      throw new Error('Server unreachable');
-    } catch (err: any) {
-      // Offline fallback
+      // 3. Fallback to local store
       const cleanDigits = inputTrimmed.replace(/\D/g, '');
       const inputLower = inputTrimmed.toLowerCase();
-      const allPatients = OfflineStore.getPatients();
+      const localPatients = OfflineStore.getPatients();
 
-      const target = allPatients.find((p) => {
+      const target = localPatients.find((p) => {
         const pUsername = (p.username || '').trim().toLowerCase();
         const pPhoneDigits = (p.phone || '').trim().replace(/\D/g, '');
         const pFullName = p.fullName.trim().toLowerCase();
@@ -266,7 +229,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
       });
 
       if (!target) {
-        setErrorMsg('No account found with this mobile number or username. Please register.');
+        setErrorMsg('No account found with this mobile number or username. Please check your credentials or register.');
         return;
       }
 
@@ -372,46 +335,40 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           await FirestoreService.linkPatientWithCaregiverKey(newPatient.id, cleanLinkedCaregiverKey);
         }
       } catch (fErr) {
-        console.warn('Firestore patient registration:', fErr);
+        console.warn('Firestore patient registration notice:', fErr);
       }
 
-      // 2. Send registration to Server Database
-      const res = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          role: 'PATIENT',
-          profile: newPatient,
-          password: regPassword.trim(),
-        }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        setErrorMsg(data.error || 'Registration failed. Please check the details.');
-        setIsSubmitting(false);
-        return;
+      // 2. Try server if running (do not fail if static/Vercel)
+      try {
+        await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            role: 'PATIENT',
+            profile: newPatient,
+            password: regPassword.trim(),
+          }),
+        });
+      } catch (srvErr) {
+        console.warn('Server offline on Vercel, saved locally & Firestore:', srvErr);
       }
 
-      // Also save in local offline store
+      // 3. Save in local offline store
       OfflineStore.addPatient(newPatient);
       if (cleanLinkedCaregiverKey) {
         OfflineStore.linkPatientToCaregiverByKey(patientId, cleanLinkedCaregiverKey);
       }
 
-      // FLOW REQUIREMENT: Register -> Login -> App
-      // Do not auto-fill details
       setAuthMode('LOGIN');
       setPatientLoginInput('');
       setPatientPassword('');
       setRegPassword('');
       setRegConfirmPassword('');
 
-      setSuccessMsg('Account registered successfully in database! Please enter your password to log in.');
+      setSuccessMsg('Account registered successfully! Please enter your password to log in.');
       VoiceService.speak('Registration successful. Please enter your password to log in.', lang);
     } catch (err: any) {
-      setErrorMsg('Network error while saving account. Please try again.');
+      setErrorMsg('Could not register account. Please check the details and try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -429,7 +386,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
       return;
     }
 
-    // Check if input is a mobile number attempt (contains digits or is a phone number format)
     const digitsOnly = inputTrimmed.replace(/\D/g, '');
     const isPhoneAttempt = /^[0-9+\s()-]+$/.test(inputTrimmed) && digitsOnly.length > 0;
     if (isPhoneAttempt) {
@@ -485,40 +441,41 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
         console.warn('Firestore caregiver login check:', fErr);
       }
 
-      // 2. Try server-side authentication API
-      const res = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          identifier: inputTrimmed,
-          password: caregiverPin.trim(),
-          role: 'CAREGIVER',
-        }),
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        const target: CaretakerProfile = data.caretaker;
-        const assignedPatient: PatientProfile | null = data.patient || null;
-
-        OfflineStore.saveAuthSession({
-          role: 'CAREGIVER',
-          caretakerId: target.id,
-          patientId: assignedPatient?.id || '',
-          userName: target.username || target.fullName,
-          expiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000,
+      // 2. Try server-side authentication API (optional on Vercel)
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            identifier: inputTrimmed,
+            password: caregiverPin.trim(),
+            role: 'CAREGIVER',
+          }),
         });
-        OfflineStore.addCaretaker(target);
-        OfflineStore.setActiveCaretakerId(target.id);
 
-        onLoginCaregiver(target, assignedPatient);
-        return;
+        if (res.ok) {
+          const data = await res.json();
+          const target: CaretakerProfile = data.caretaker;
+          const assignedPatient: PatientProfile | null = data.patient || null;
+
+          OfflineStore.saveAuthSession({
+            role: 'CAREGIVER',
+            caretakerId: target.id,
+            patientId: assignedPatient?.id || '',
+            userName: target.username || target.fullName,
+            expiresAt: Date.now() + 365 * 24 * 60 * 60 * 1000,
+          });
+          OfflineStore.addCaretaker(target);
+          OfflineStore.setActiveCaretakerId(target.id);
+
+          onLoginCaregiver(target, assignedPatient);
+          return;
+        }
+      } catch (srvErr) {
+        console.warn('Server offline on Vercel, trying local store:', srvErr);
       }
 
-      const errData = await res.json();
-      setErrorMsg(errData.error || 'Incorrect caregiver mobile number or password.');
-    } catch (err) {
-      // Offline fallback
+      // 3. Fallback to local store
       const inputLower = inputTrimmed.toLowerCase();
       const cleanDigits = inputTrimmed.replace(/\D/g, '');
       const allCaretakers = OfflineStore.getCaretakers();
@@ -535,7 +492,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
       });
 
       if (!target) {
-        setErrorMsg('No caregiver account found with this mobile number or username.');
+        setErrorMsg('No caregiver account found with this mobile number or username. Please register.');
         return;
       }
 
@@ -632,48 +589,41 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
       try {
         await FirestoreService.registerCaregiver(newCaretaker, regCaregiverPin.trim());
       } catch (fErr) {
-        console.warn('Firestore caregiver registration:', fErr);
+        console.warn('Firestore caregiver registration notice:', fErr);
       }
 
-      // 2. Send registration to Server Database
-      const res = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          role: 'CAREGIVER',
-          profile: newCaretaker,
-          password: regCaregiverPin.trim(),
-        }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        setErrorMsg(data.error || 'Registration failed. Please check the details.');
-        setIsSubmitting(false);
-        return;
+      // 2. Try server if running (do not fail if static/Vercel)
+      try {
+        await fetch('/api/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            role: 'CAREGIVER',
+            profile: newCaretaker,
+            password: regCaregiverPin.trim(),
+          }),
+        });
+      } catch (srvErr) {
+        console.warn('Server offline on Vercel, saved locally & Firestore:', srvErr);
       }
 
-      // Save locally
+      // 3. Save locally
       OfflineStore.addCaretaker(newCaretaker);
 
-      // If caregiver provided an existing patient key to link, link immediately
       if (regCaregiverLinkPatientKey.trim()) {
         OfflineStore.linkCaregiverToPatientByKey(newCaretakerId, regCaregiverLinkPatientKey.trim().toUpperCase());
       }
 
-      // FLOW REQUIREMENT: Register -> Login -> App
-      // Do not auto-fill details
       setAuthMode('LOGIN');
       setCaregiverLoginInput('');
       setCaregiverPin('');
       setRegCaregiverPin('');
       setRegCaregiverConfirmPin('');
 
-      setSuccessMsg('Caregiver account created successfully in database! Please enter your password to log in.');
+      setSuccessMsg('Caregiver account created successfully! Please enter your password to log in.');
       VoiceService.speak('Registration successful. Please enter your password to log in.', lang);
     } catch (err) {
-      setErrorMsg('Failed to create caregiver account. Please check your connection.');
+      setErrorMsg('Failed to create caregiver account. Please check your inputs and try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -710,7 +660,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
           <button
             type="button"
             onClick={() => setIsVoiceModalOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-100 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-700 text-amber-950 dark:text-amber-200 text-xs font-bold hover:bg-amber-200 dark:hover:bg-amber-900/80 transition"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-amber-100 dark:bg-amber-950/60 border border-amber-300 dark:border-amber-700 text-amber-950 dark:text-amber-200 text-xs font-bold hover:bg-amber-200 dark:hover:bg-amber-900/80 transition cursor-pointer"
             title="Download Voice Pack & Audio Tuning"
           >
             <Volume2 className="w-4 h-4 text-amber-700 dark:text-amber-300" />
@@ -842,7 +792,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                   setErrorMsg(null);
                   setSuccessMsg(null);
                 }}
-                className={`px-3 py-1.5 rounded-lg transition ${
+                className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
                   authMode === 'LOGIN'
                     ? 'bg-white dark:bg-[#121820] text-stone-900 dark:text-stone-100 shadow-xs'
                     : 'text-stone-500 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200'
@@ -857,7 +807,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                   setErrorMsg(null);
                   setSuccessMsg(null);
                 }}
-                className={`px-3 py-1.5 rounded-lg transition ${
+                className={`px-3 py-1.5 rounded-lg transition cursor-pointer ${
                   authMode === 'REGISTER'
                     ? 'bg-white dark:bg-[#121820] text-stone-900 dark:text-stone-100 shadow-xs'
                     : 'text-stone-500 dark:text-stone-400 hover:text-stone-900 dark:hover:text-stone-200'
@@ -908,7 +858,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                         <button
                           type="button"
                           onClick={() => setIsForgotModalOpen(true)}
-                          className="text-xs font-bold text-teal-700 dark:text-teal-400 hover:underline inline-flex items-center gap-1"
+                          className="text-xs font-bold text-teal-700 dark:text-teal-400 hover:underline inline-flex items-center gap-1 cursor-pointer"
                         >
                           <KeyRound className="w-3.5 h-3.5" />
                           <span>Forgot PIN?</span>
@@ -935,7 +885,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                         <button
                           type="button"
                           onClick={() => setShowPatientPassword(!showPatientPassword)}
-                          className="absolute right-3.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 p-1"
+                          className="absolute right-3.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 p-1 cursor-pointer"
                           aria-label="Toggle password visibility"
                         >
                           {showPatientPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -972,7 +922,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                           setErrorMsg(null);
                           setSuccessMsg(null);
                         }}
-                        className="font-bold text-teal-700 dark:text-teal-400 hover:underline"
+                        className="font-bold text-teal-700 dark:text-teal-400 hover:underline cursor-pointer"
                       >
                         Register here
                       </button>
@@ -1116,7 +1066,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                           <button
                             type="button"
                             onClick={() => setShowRegPassword(!showRegPassword)}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 p-1"
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 p-1 cursor-pointer"
                           >
                             {showRegPassword ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                           </button>
@@ -1156,7 +1106,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                       <CheckCircle2 className="w-5 h-5 text-amber-300 shrink-0" />
                     )}
                     <span className="tracking-wide">
-                      {isSubmitting ? 'Saving to Database...' : 'Register Account (Step 1)'}
+                      {isSubmitting ? 'Saving Account...' : 'Register Account (Step 1)'}
                     </span>
                   </button>
 
@@ -1170,7 +1120,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                           setErrorMsg(null);
                           setSuccessMsg(null);
                         }}
-                        className="font-bold text-teal-700 dark:text-teal-400 hover:underline"
+                        className="font-bold text-teal-700 dark:text-teal-400 hover:underline cursor-pointer"
                       >
                         Log In
                       </button>
@@ -1238,7 +1188,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                         <button
                           type="button"
                           onClick={() => setShowCaregiverPin(!showCaregiverPin)}
-                          className="absolute right-3.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 p-1"
+                          className="absolute right-3.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-600 p-1 cursor-pointer"
                         >
                           {showCaregiverPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                         </button>
@@ -1274,7 +1224,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                           setErrorMsg(null);
                           setSuccessMsg(null);
                         }}
-                        className="font-bold text-teal-700 dark:text-teal-400 hover:underline"
+                        className="font-bold text-teal-700 dark:text-teal-400 hover:underline cursor-pointer"
                       >
                         Register here
                       </button>
@@ -1414,7 +1364,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                       <ShieldCheck className="w-5 h-5 text-amber-300 shrink-0" />
                     )}
                     <span className="tracking-wide">
-                      {isSubmitting ? 'Saving to Database...' : 'Register Caregiver Account (Step 1)'}
+                      {isSubmitting ? 'Saving Caregiver Account...' : 'Register Caregiver Account (Step 1)'}
                     </span>
                   </button>
 
@@ -1428,7 +1378,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({
                           setErrorMsg(null);
                           setSuccessMsg(null);
                         }}
-                        className="font-bold text-teal-700 dark:text-teal-400 hover:underline"
+                        className="font-bold text-teal-700 dark:text-teal-400 hover:underline cursor-pointer"
                       >
                         Log In
                       </button>

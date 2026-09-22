@@ -187,6 +187,12 @@ export class FirestoreService {
     await setDoc(pRef, { ...updates, updatedAt: new Date().toISOString() }, { merge: true });
   }
 
+  static async deletePatient(patientId: string): Promise<void> {
+    await ensureAuthUser();
+    const pRef = doc(db, 'patients', patientId);
+    await deleteDoc(pRef);
+  }
+
   // -------------------------------------------------------------
   // CAREGIVER AUTH & PROFILE
   // -------------------------------------------------------------

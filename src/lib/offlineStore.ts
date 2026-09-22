@@ -539,13 +539,13 @@ export class OfflineStore {
       const data = localStorage.getItem(STORAGE_KEYS.PATIENTS_LIST);
       if (data) {
         const list: PatientProfile[] = JSON.parse(data);
-        if (Array.isArray(list) && list.length > 0) {
+        if (Array.isArray(list)) {
           return list.map(sanitizePatient);
         }
       }
-      return DEFAULT_PATIENTS.map(sanitizePatient);
+      return [];
     } catch {
-      return DEFAULT_PATIENTS.map(sanitizePatient);
+      return [];
     }
   }
 
@@ -582,6 +582,8 @@ export class OfflineStore {
       localStorage.removeItem(`${STORAGE_KEYS.REMINDERS}_${id}`);
       localStorage.removeItem(`${STORAGE_KEYS.SESSIONS}_${id}`);
       localStorage.removeItem(`${STORAGE_KEYS.MEMORIES}_${id}`);
+      localStorage.removeItem(`cognitivesaathi_custom_games_${id}`);
+      localStorage.removeItem(`cognitivesaathi_ai_report_${id}`);
 
       if (this.getActivePatientId() === id) {
         if (list.length > 0) {
@@ -590,6 +592,9 @@ export class OfflineStore {
         } else {
           localStorage.removeItem(STORAGE_KEYS.ACTIVE_PATIENT_ID);
           localStorage.removeItem(STORAGE_KEYS.PATIENT);
+          if (typeof window !== 'undefined' && window.sessionStorage) {
+            sessionStorage.removeItem(STORAGE_KEYS.ACTIVE_PATIENT_ID);
+          }
         }
       }
       return list;
@@ -607,12 +612,15 @@ export class OfflineStore {
       if (id) {
         const found = list.find((p) => p.id === id);
         if (found) return sanitizePatient(found);
+        return DEFAULT_PATIENT;
       }
       const activeId = this.getActivePatientId();
-      const foundActive = list.find((p) => p.id === activeId);
-      if (foundActive) return sanitizePatient(foundActive);
+      if (activeId) {
+        const foundActive = list.find((p) => p.id === activeId);
+        if (foundActive) return sanitizePatient(foundActive);
+      }
 
-      return sanitizePatient(list[0]);
+      return DEFAULT_PATIENT;
     } catch {
       return DEFAULT_PATIENT;
     }
@@ -1287,7 +1295,13 @@ export class OfflineStore {
       const key = `${STORAGE_KEYS.ROUTINE}_${pId}`;
       const data = localStorage.getItem(key);
       const parsed = data ? JSON.parse(data) : [];
-      return Array.isArray(parsed) ? parsed : [];
+      if (!Array.isArray(parsed)) return [];
+      const seen = new Set<string>();
+      return parsed.filter((task) => {
+        if (!task || !task.id || seen.has(task.id)) return false;
+        seen.add(task.id);
+        return true;
+      });
     } catch {
       return [];
     }
@@ -1298,8 +1312,14 @@ export class OfflineStore {
       const pId = patientId || this.getActivePatientId();
       if (!pId) return;
       const key = `${STORAGE_KEYS.ROUTINE}_${pId}`;
-      localStorage.setItem(key, JSON.stringify(routine));
-      this.enqueueSyncEvent('ROUTINE_UPDATED', { count: routine.filter((r) => r.completed).length, patientId: pId });
+      const seen = new Set<string>();
+      const deduped = (routine || []).filter((task) => {
+        if (!task || !task.id || seen.has(task.id)) return false;
+        seen.add(task.id);
+        return true;
+      });
+      localStorage.setItem(key, JSON.stringify(deduped));
+      this.enqueueSyncEvent('ROUTINE_UPDATED', { count: deduped.filter((r) => r.completed).length, patientId: pId });
     } catch (e) {
       console.warn('Local storage error:', e);
     }
@@ -1307,14 +1327,27 @@ export class OfflineStore {
 
   static addTaskToRoutine(task: RoutineTask, patientId?: string): RoutineTask[] {
     const list = this.getRoutine(patientId);
-    const updated = [...list, task];
+    const existingIdx = list.findIndex((t) => t.id === task.id);
+    let updated: RoutineTask[];
+    if (existingIdx >= 0) {
+      updated = [...list];
+      updated[existingIdx] = task;
+    } else {
+      updated = [...list, task];
+    }
     this.saveRoutine(updated, patientId);
     return updated;
   }
 
   static addMultipleTasksToRoutine(newTasks: RoutineTask[], patientId?: string): RoutineTask[] {
     const list = this.getRoutine(patientId);
-    const updated = [...list, ...newTasks];
+    const seen = new Set<string>(list.map((t) => t.id));
+    const filteredNew = newTasks.filter((t) => {
+      if (!t || !t.id || seen.has(t.id)) return false;
+      seen.add(t.id);
+      return true;
+    });
+    const updated = [...list, ...filteredNew];
     this.saveRoutine(updated, patientId);
     return updated;
   }
@@ -1323,6 +1356,88 @@ export class OfflineStore {
     const list = this.getRoutine(patientId);
     const updated = list.filter((t) => t.id !== taskId);
     this.saveRoutine(updated, patientId);
+    return updated;
+  }
+
+  // Custom Games & Activities (Synced per patient)
+  static getCustomGames(patientId?: string): GameDefinition[] {
+    try {
+      const pId = patientId || this.getActivePatientId();
+      if (!pId) return [];
+      const data = localStorage.getItem(`cognitivesaathi_custom_games_${pId}`);
+      if (!data) return [];
+      const list = JSON.parse(data);
+      if (!Array.isArray(list)) return [];
+      const seen = new Set<string>();
+      return list.filter((g) => {
+        if (!g || !g.id || seen.has(g.id)) return false;
+        seen.add(g.id);
+        return true;
+      });
+    } catch {
+      return [];
+    }
+  }
+
+  static saveCustomGames(games: GameDefinition[], patientId?: string): void {
+    try {
+      const pId = patientId || this.getActivePatientId();
+      if (!pId) return;
+      const seen = new Set<string>();
+      const deduped = (games || []).filter((g) => {
+        if (!g || !g.id || seen.has(g.id)) return false;
+        seen.add(g.id);
+        return true;
+      });
+      localStorage.setItem(`cognitivesaathi_custom_games_${pId}`, JSON.stringify(deduped));
+    } catch (e) {
+      console.warn('Local storage custom games error:', e);
+    }
+  }
+
+  // Daily Streak and Active Date Calculation
+  static calculateNewStreak(
+    currentStreak: number,
+    lastActiveDate?: string
+  ): { streak: number; lastActiveDate: string } {
+    const todayStr = new Date().toISOString().split('T')[0]; // YYYY-MM-DD
+
+    if (!lastActiveDate) {
+      return { streak: 1, lastActiveDate: todayStr };
+    }
+
+    if (lastActiveDate === todayStr) {
+      return { streak: Math.max(1, currentStreak), lastActiveDate: todayStr };
+    }
+
+    const lastDate = new Date(lastActiveDate);
+    const todayDate = new Date(todayStr);
+    const diffTime = todayDate.getTime() - lastDate.getTime();
+    const diffDays = Math.round(diffTime / (1000 * 3600 * 24));
+
+    if (diffDays === 1) {
+      return { streak: (currentStreak || 0) + 1, lastActiveDate: todayStr };
+    } else {
+      return { streak: 1, lastActiveDate: todayStr };
+    }
+  }
+
+  static recordPatientActivity(patientId: string): PatientProfile | null {
+    if (!patientId) return null;
+    const patient = this.getPatient(patientId);
+    if (!patient || !patient.id) return null;
+
+    const { streak, lastActiveDate } = this.calculateNewStreak(
+      patient.dailyStreak || 0,
+      patient.lastActiveDate
+    );
+    const updated: PatientProfile = {
+      ...patient,
+      dailyStreak: streak,
+      lastActiveDate,
+      todayCompletedCount: (patient.todayCompletedCount || 0) + 1,
+    };
+    this.savePatient(updated);
     return updated;
   }
 

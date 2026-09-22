@@ -71,11 +71,19 @@ export const PatientMyDay: React.FC<PatientMyDayProps> = ({
     }
   };
 
-  const morningTasks = routine.filter((r) => r.timeSlot === 'Morning');
-  const afternoonTasks = routine.filter((r) => r.timeSlot === 'Afternoon');
-  const eveningTasks = routine.filter((r) => r.timeSlot === 'Evening');
+  // Deduplicate tasks by task.id
+  const seenTaskIds = new Set<string>();
+  const uniqueRoutine = routine.filter((r) => {
+    if (!r || !r.id || seenTaskIds.has(r.id)) return false;
+    seenTaskIds.add(r.id);
+    return true;
+  });
 
-  const completedCount = routine.filter((r) => r.completed).length;
+  const morningTasks = uniqueRoutine.filter((r) => r.timeSlot === 'Morning');
+  const afternoonTasks = uniqueRoutine.filter((r) => r.timeSlot === 'Afternoon');
+  const eveningTasks = uniqueRoutine.filter((r) => r.timeSlot === 'Evening');
+
+  const completedCount = uniqueRoutine.filter((r) => r.completed).length;
 
   return (
     <div className="space-y-8 animate-fadeIn">

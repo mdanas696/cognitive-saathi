@@ -77,6 +77,7 @@ export const CaregiverMemoriesManager: React.FC<CaregiverMemoriesManagerProps> =
   const [dateLabel, setDateLabel] = useState('');
   const [region, setRegion] = useState(patient?.region || 'Assam');
   const [imageUrl, setImageUrl] = useState(PRESET_IMAGE_TEMPLATES[0].url);
+  const [imageUrls, setImageUrls] = useState<string[]>([PRESET_IMAGE_TEMPLATES[0].url]);
   const [imageAlt, setImageAlt] = useState(PRESET_IMAGE_TEMPLATES[0].alt);
   const [story, setStory] = useState('');
   const [audioPrompt, setAudioPrompt] = useState('');
@@ -128,31 +129,60 @@ export const CaregiverMemoriesManager: React.FC<CaregiverMemoriesManagerProps> =
     setImageUrl(tpl.url);
     setImageAlt(tpl.alt);
     setCategory(tpl.category);
+    setImageUrls((prev) => {
+      if (prev.includes(tpl.url)) return prev;
+      if (prev.length >= 4) return [tpl.url, ...prev.slice(0, 3)];
+      return [...prev, tpl.url];
+    });
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      if (event.target?.result) {
-        setImageUrl(event.target.result as string);
-        setImageAlt(file.name.replace(/\.[^/.]+$/, ''));
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    const fileList = Array.from(files).slice(0, 4);
+    fileList.forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          const resultStr = event.target.result as string;
+          setImageUrl(resultStr);
+          setImageAlt(file.name.replace(/\.[^/.]+$/, ''));
+          setImageUrls((prev) => {
+            if (prev.includes(resultStr)) return prev;
+            if (prev.length >= 4) return prev;
+            return [...prev, resultStr];
+          });
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const handleRemovePhoto = (index: number) => {
+    setImageUrls((prev) => {
+      const next = prev.filter((_, i) => i !== index);
+      if (next.length > 0) {
+        setImageUrl(next[0]);
+      } else {
+        setImageUrl('');
       }
-    };
-    reader.readAsDataURL(file);
+      return next;
+    });
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim() || !story.trim()) return;
 
+    const finalUrls = imageUrls.length > 0 ? imageUrls : (imageUrl ? [imageUrl] : [PRESET_IMAGE_TEMPLATES[0].url]);
+
     const newMemory: MemoryMoment = {
       id: `mem-${Date.now()}`,
       title: title.trim(),
       category: category as any,
       region: region.trim() || patient.region || 'Assam',
-      imageUrl: imageUrl.trim() || PRESET_IMAGE_TEMPLATES[0].url,
+      imageUrl: finalUrls[0],
+      imageUrls: finalUrls,
       imageAlt: imageAlt.trim() || title.trim(),
       dateLabel: dateLabel.trim() || 'Cherished Memory',
       story: story.trim(),
@@ -166,7 +196,7 @@ export const CaregiverMemoriesManager: React.FC<CaregiverMemoriesManagerProps> =
       },
     };
 
-    onAddMemory(newMemory);
+    onAddMemory?.(newMemory);
     setIsModalOpen(false);
 
     // Reset Form
@@ -174,6 +204,7 @@ export const CaregiverMemoriesManager: React.FC<CaregiverMemoriesManagerProps> =
     setStory('');
     setAudioPrompt('');
     setDateLabel('');
+    setImageUrls([PRESET_IMAGE_TEMPLATES[0].url]);
   };
 
   return (
@@ -458,19 +489,33 @@ export const CaregiverMemoriesManager: React.FC<CaregiverMemoriesManagerProps> =
                   )}
                 </div>
 
-                {/* Selected Photo Preview */}
-                {imageUrl && (
-                  <div className="relative rounded-2xl overflow-hidden border border-stone-200 bg-stone-50 h-36 flex items-center justify-center">
-                    <img
-                      src={imageUrl}
-                      alt={imageAlt || 'Memory preview'}
-                      className="w-full h-full object-cover"
-                      referrerPolicy="no-referrer"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent flex items-end p-3">
-                      <span className="text-xs text-white font-medium line-clamp-1">
-                        {imageAlt || 'Memory photo'}
-                      </span>
+                {/* Selected Photo Preview Grid (Up to 4) */}
+                {imageUrls.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                      {imageUrls.map((url, idx) => (
+                        <div key={idx} className="relative rounded-xl overflow-hidden border border-stone-200 bg-stone-50 h-24 group">
+                          <img
+                            src={url}
+                            alt={`Photo ${idx + 1}`}
+                            className="w-full h-full object-cover"
+                            referrerPolicy="no-referrer"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleRemovePhoto(idx)}
+                            className="absolute top-1 right-1 p-1 rounded-full bg-stone-900/80 text-white hover:bg-rose-600 transition"
+                            title="Remove photo"
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                          {idx === 0 && (
+                            <div className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded bg-amber-500 text-stone-900 text-[9px] font-bold">
+                              Primary
+                            </div>
+                          )}
+                        </div>
+                      ))}
                     </div>
                   </div>
                 )}
@@ -479,10 +524,12 @@ export const CaregiverMemoriesManager: React.FC<CaregiverMemoriesManagerProps> =
                 <div className="flex flex-col sm:flex-row gap-2">
                   <label className="flex-1 cursor-pointer py-2.5 px-4 rounded-xl border border-dashed border-teal-700 bg-teal-50 hover:bg-teal-100/80 text-teal-900 text-xs font-bold transition flex items-center justify-center gap-2">
                     <Upload className="w-4 h-4 text-teal-700" />
-                    <span>Upload Photo from Device</span>
+                    <span>{imageUrls.length >= 4 ? 'Maximum 4 Photos Added' : `Upload Photos (${imageUrls.length}/4)`}</span>
                     <input
                       type="file"
                       accept="image/*"
+                      multiple
+                      disabled={imageUrls.length >= 4}
                       onChange={handleFileUpload}
                       className="hidden"
                     />

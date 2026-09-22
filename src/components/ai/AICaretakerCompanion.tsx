@@ -59,34 +59,46 @@ export const AICaretakerCompanion: React.FC<AICaretakerCompanionProps> = ({
     const SpeechRecognition =
       (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (SpeechRecognition) {
-      const recognition = new SpeechRecognition();
-      recognition.continuous = false;
-      recognition.interimResults = false;
-      recognition.lang = lang === 'as' ? 'as-IN' : lang === 'hi' ? 'hi-IN' : 'en-IN';
+      try {
+        const recognition = new SpeechRecognition();
+        recognition.continuous = false;
+        recognition.interimResults = false;
+        recognition.maxAlternatives = 1;
+        recognition.lang = lang === 'as' ? 'as-IN' : lang === 'hi' ? 'hi-IN' : 'en-IN';
 
-      recognition.onresult = (event: any) => {
-        const transcript = event.results[0][0].transcript;
-        setInputText(transcript);
-        handleSendMessage(transcript);
-        setIsListening(false);
-      };
+        recognition.onresult = (event: any) => {
+          if (event.results && event.results.length > 0 && event.results[0][0]) {
+            const transcript = event.results[0][0].transcript.trim();
+            if (transcript) {
+              setInputText(transcript);
+              handleSendMessage(transcript);
+            }
+          }
+          setIsListening(false);
+        };
 
-      recognition.onerror = () => {
-        setIsListening(false);
-      };
+        recognition.onerror = (err: any) => {
+          console.warn('Speech recognition error event:', err);
+          setIsListening(false);
+        };
 
-      recognition.onend = () => {
-        setIsListening(false);
-      };
+        recognition.onend = () => {
+          setIsListening(false);
+        };
 
-      recognitionRef.current = recognition;
+        recognitionRef.current = recognition;
+      } catch (e) {
+        console.warn('Could not initialize SpeechRecognition:', e);
+      }
     }
   }, [lang]);
 
   const toggleListening = () => {
     if (!recognitionRef.current) return;
     if (isListening) {
-      recognitionRef.current.stop();
+      try {
+        recognitionRef.current.stop();
+      } catch {}
       setIsListening(false);
     } else {
       try {
@@ -94,6 +106,7 @@ export const AICaretakerCompanion: React.FC<AICaretakerCompanionProps> = ({
         setIsListening(true);
       } catch (err) {
         console.warn('Speech recognition error:', err);
+        setIsListening(false);
       }
     }
   };
@@ -113,10 +126,18 @@ export const AICaretakerCompanion: React.FC<AICaretakerCompanionProps> = ({
     setInputText('');
     setIsLoading(true);
 
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => {
+      try {
+        controller.abort('timeout');
+      } catch {}
+    }, 15000);
+
     try {
       const res = await fetch('/api/ai/companion', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
+        signal: controller.signal,
         body: JSON.stringify({
           message: query,
           patientName: patient.preferredName || patient.fullName,
@@ -131,6 +152,7 @@ export const AICaretakerCompanion: React.FC<AICaretakerCompanionProps> = ({
         }),
       });
 
+      clearTimeout(timeoutId);
       const data = await res.json();
       const replyText =
         data.reply ||
@@ -148,8 +170,8 @@ export const AICaretakerCompanion: React.FC<AICaretakerCompanionProps> = ({
       if (isSpeakingEnabled) {
         VoiceService.speak(replyText, lang);
       }
-    } catch (err) {
-      console.error('Error contacting AI Caretaker:', err);
+    } catch {
+      clearTimeout(timeoutId);
       const fallbackMsg: ChatMessage = {
         id: `ai-err-${Date.now()}`,
         sender: 'ai',

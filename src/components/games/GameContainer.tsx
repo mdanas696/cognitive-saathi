@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { ArrowLeft, Volume2, Sparkles, CheckCircle2, RotateCcw, Play } from 'lucide-react';
 import { GameDefinition, LanguageCode, GameSessionResult } from '../../types';
-import { translations } from '../../lib/i18n';
+import { translations, getGameTranslation } from '../../lib/i18n';
 import { VoiceService } from '../../lib/voiceService';
 import { OfflineStore } from '../../lib/offlineStore';
 import { MemoryRecallGame } from './MemoryRecallGame';
@@ -24,13 +24,14 @@ export const GameContainer: React.FC<GameContainerProps> = ({
   onExit,
   onSessionRecorded,
 }) => {
-  const t = translations[lang];
+  const t = translations[lang] || translations.en;
+  const localizedGame = getGameTranslation(game.id, lang);
   const [gameState, setGameState] = useState<'INSTRUCTION' | 'PLAYING' | 'COMPLETED'>('INSTRUCTION');
   const [difficulty] = useState<number>(2);
   const [sessionResult, setSessionResult] = useState<GameSessionResult | null>(null);
 
   const handleSpeakInstruction = () => {
-    const textToSpeak = `${game.title}. ${game.shortDescription}. Take your time comfortably. There is no hurry.`;
+    const textToSpeak = `${localizedGame.title}. ${localizedGame.shortDescription}. ${t.calmEncouragement}`;
     VoiceService.speak(textToSpeak, lang);
   };
 
@@ -85,10 +86,10 @@ export const GameContainer: React.FC<GameContainerProps> = ({
 
         <div className="text-right">
           <span className="text-xs font-semibold text-teal-800 uppercase tracking-wider block">
-            {game.culturalTag}
+            {localizedGame.culturalTag || game.culturalTag}
           </span>
           <h2 className="text-lg font-bold font-serif-heading text-stone-900">
-            {game.title}
+            {localizedGame.title || game.title}
           </h2>
         </div>
       </div>
@@ -105,10 +106,10 @@ export const GameContainer: React.FC<GameContainerProps> = ({
               {t.instructions}
             </span>
             <h3 className="text-2xl sm:text-3xl font-bold font-serif-heading text-stone-900">
-              {game.title}
+              {localizedGame.title || game.title}
             </h3>
             <p className="text-stone-700 text-base sm:text-lg leading-relaxed pt-2">
-              {game.shortDescription}
+              {localizedGame.shortDescription || game.shortDescription}
             </p>
           </div>
 

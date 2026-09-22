@@ -86,6 +86,7 @@ export interface MemoryMoment {
   category: 'Family' | 'Festival' | 'Place' | 'Tradition' | string;
   region: string;
   imageUrl: string;
+  imageUrls?: string[];
   imageAlt: string;
   dateLabel: string;
   story: string;
@@ -135,6 +136,7 @@ export interface PatientProfile {
   notes?: string;
   avatarUrl?: string;
   dailyStreak: number;
+  lastActiveDate?: string;
   todayCompletedCount: number;
   phone?: string;
   caregiverRemovalNotice?: CaregiverRemovalNotice;

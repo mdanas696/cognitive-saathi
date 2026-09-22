@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Sparkles,
   Play,
@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { GameDefinition, PatientProfile, GameSessionResult, LanguageCode } from '../../types';
 import { VoiceService } from '../../lib/voiceService';
+import { OfflineStore } from '../../lib/offlineStore';
 
 interface CaregiverActivitiesViewProps {
   patient: PatientProfile;
@@ -61,12 +62,40 @@ export const CaregiverActivitiesView: React.FC<CaregiverActivitiesViewProps> = (
   // Custom games created by caregiver
   const [customGames, setCustomGames] = useState<GameDefinition[]>(() => {
     try {
+      const pId = patient?.id || OfflineStore.getActivePatientId();
+      if (pId) {
+        const stored = OfflineStore.getCustomGames(pId);
+        if (stored && stored.length > 0) return stored;
+      }
       const saved = localStorage.getItem('caregiver_custom_games');
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
     }
   });
+
+  // Sync exercises from server for active patient
+  useEffect(() => {
+    if (!patient?.id) return;
+    fetch(`/api/patients/${patient.id}/exercises`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((serverExercises: GameDefinition[]) => {
+        if (Array.isArray(serverExercises) && serverExercises.length > 0) {
+          setCustomGames((prev) => {
+            const combined = [...serverExercises, ...prev];
+            const seen = new Set<string>();
+            const deduped = combined.filter((g) => {
+              if (!g || !g.id || seen.has(g.id)) return false;
+              seen.add(g.id);
+              return true;
+            });
+            OfflineStore.saveCustomGames(deduped, patient.id);
+            return deduped;
+          });
+        }
+      })
+      .catch(() => {});
+  }, [patient?.id]);
 
   // New Custom Game Form State
   const [newGameTitle, setNewGameTitle] = useState('');
@@ -82,7 +111,16 @@ export const CaregiverActivitiesView: React.FC<CaregiverActivitiesViewProps> = (
     { id: 'RECOGNITION', label: 'Heritage Recognition' },
   ];
 
-  const allAvailableGames = [...games, ...customGames];
+  // Deduplicate combined games by game.id
+  const allAvailableGames = (() => {
+    const combined = [...games, ...customGames];
+    const seen = new Set<string>();
+    return combined.filter((g) => {
+      if (!g || !g.id || seen.has(g.id)) return false;
+      seen.add(g.id);
+      return true;
+    });
+  })();
 
   const filteredGames = allAvailableGames.filter(
     (g) => selectedCategory === 'ALL' || g.category === selectedCategory
@@ -174,10 +212,19 @@ export const CaregiverActivitiesView: React.FC<CaregiverActivitiesViewProps> = (
       iconName: 'Sparkles',
     };
 
-    const updatedList = [newGame, ...customGames];
+    const updatedList = [newGame, ...customGames.filter((g) => g.id !== newGame.id)];
     setCustomGames(updatedList);
     try {
       localStorage.setItem('caregiver_custom_games', JSON.stringify(updatedList));
+      const pId = patient?.id || OfflineStore.getActivePatientId();
+      if (pId) {
+        OfflineStore.saveCustomGames(updatedList, pId);
+        fetch(`/api/patients/${pId}/exercises`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(newGame),
+        }).catch(() => {});
+      }
     } catch {}
 
     setCustomExerciseModalOpen(false);

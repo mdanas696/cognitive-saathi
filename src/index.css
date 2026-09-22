@@ -13,6 +13,16 @@
     color-scheme: light;
   }
 
+  html[lang="as"], html[lang="bn"] {
+    --font-body: 'Noto Sans Bengali', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    --font-heading: 'Noto Sans Bengali', 'Lora', Georgia, serif;
+  }
+
+  html[lang="hi"] {
+    --font-body: 'Noto Sans Devanagari', 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    --font-heading: 'Noto Sans Devanagari', 'Lora', Georgia, serif;
+  }
+
   html.dark {
     color-scheme: dark;
   }

@@ -238,9 +238,9 @@ export default function App() {
     const patId = session?.patientId || activePatId;
     if (patId) {
       const found = OfflineStore.getPatient(patId);
-      if (found) return found;
+      if (found && found.id) return found;
     }
-    return OfflineStore.getPatient() || DEFAULT_PATIENT;
+    return DEFAULT_PATIENT;
   });
 
   const [routine, setRoutine] = useState<RoutineTask[]>(() => {
@@ -251,7 +251,7 @@ export default function App() {
       const stored = OfflineStore.getRoutine(pId);
       if (stored && stored.length > 0) return stored;
     }
-    return DEFAULT_ROUTINE;
+    return [];
   });
   const [reminders, setReminders] = useState<ReminderItem[]>(() => {
     const session = OfflineStore.getAuthSession();
@@ -643,12 +643,29 @@ export default function App() {
     }
   };
 
+  // Sync HTML lang attribute for regional font rendering
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      document.documentElement.lang = lang;
+    }
+  }, [lang]);
+
   // Routine Checklist Toggle & Patient Self-Management
   const handleToggleRoutineTask = (taskId: string) => {
     const updated = routine.map((r) =>
       r.id === taskId ? { ...r, completed: !r.completed } : r
     );
     handleUpdateRoutine(updated);
+    if (patient && patient.id) {
+      const completedTask = updated.find((r) => r.id === taskId && r.completed);
+      if (completedTask) {
+        const updatedP = OfflineStore.recordPatientActivity(patient.id);
+        if (updatedP) {
+          setPatient(updatedP);
+          FirestoreService.updatePatient(patient.id, updatedP).catch(() => {});
+        }
+      }
+    }
   };
 
   const handleAddPatientTask = (task: RoutineTask) => {
@@ -773,11 +790,12 @@ export default function App() {
 
   const handleSessionRecorded = (session: GameSessionResult) => {
     setSessions((prev) => [session, ...prev]);
-    setPatient((prev) => ({
-      ...prev,
-      todayCompletedCount: (prev.todayCompletedCount || 0) + 1,
-    }));
     if (patient && patient.id) {
+      const updatedP = OfflineStore.recordPatientActivity(patient.id);
+      if (updatedP) {
+        setPatient(updatedP);
+        FirestoreService.updatePatient(patient.id, updatedP).catch(() => {});
+      }
       FirestoreService.recordGameSession(patient.id, session).catch((err) => {
         console.warn('Error recording game session to Firestore:', err);
       });
@@ -898,6 +916,8 @@ export default function App() {
       // Patient deleted their own profile
       OfflineStore.unlinkCaregiver(patientId, 'PATIENT', patient.fullName);
       OfflineStore.deletePatient(patientId);
+      fetch(`/api/patients/${patientId}`, { method: 'DELETE' }).catch(() => {});
+      FirestoreService.deletePatient(patientId).catch(() => {});
       OfflineStore.clearAuthSession();
       setIsLoggedIn(false);
       return;
@@ -905,6 +925,10 @@ export default function App() {
 
     // Caregiver deleted/removed patient from their circle
     OfflineStore.unlinkCaregiver(patientId, 'CAREGIVER', activeCaretaker?.fullName, activeCaretaker?.id);
+    OfflineStore.deletePatient(patientId);
+    fetch(`/api/patients/${patientId}`, { method: 'DELETE' }).catch(() => {});
+    FirestoreService.deletePatient(patientId).catch(() => {});
+
     let updatedC = activeCaretaker;
     if (activeCaretaker) {
       updatedC = {

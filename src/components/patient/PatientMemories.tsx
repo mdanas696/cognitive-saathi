@@ -62,6 +62,7 @@ export const PatientMemories: React.FC<PatientMemoriesProps> = ({
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [selectedOption, setSelectedOption] = useState<number | null>(null);
   const [showFeedback, setShowFeedback] = useState(false);
+  const [activePhotoIndex, setActivePhotoIndex] = useState(0);
 
   // Add Memory Modal State
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -70,18 +71,28 @@ export const PatientMemories: React.FC<PatientMemoriesProps> = ({
   const [newDate, setNewDate] = useState('');
   const [newStory, setNewStory] = useState('');
   const [customPhotoUrl, setCustomPhotoUrl] = useState('');
+  const [customPhotoUrls, setCustomPhotoUrls] = useState<string[]>([]);
   const [selectedPresetImg, setSelectedPresetImg] = useState(ELDER_IMAGE_PRESETS[0]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      if (event.target?.result) {
-        setCustomPhotoUrl(event.target.result as string);
-      }
-    };
-    reader.readAsDataURL(file);
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    const fileList = Array.from(files).slice(0, 4);
+    fileList.forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        if (event.target?.result) {
+          const res = event.target.result as string;
+          setCustomPhotoUrl(res);
+          setCustomPhotoUrls((prev) => {
+            if (prev.includes(res)) return prev;
+            if (prev.length >= 4) return prev;
+            return [...prev, res];
+          });
+        }
+      };
+      reader.readAsDataURL(file);
+    });
   };
 
   const handlePlayStory = (memory: MemoryMoment) => {
@@ -107,14 +118,17 @@ export const PatientMemories: React.FC<PatientMemoriesProps> = ({
     e.preventDefault();
     if (!newTitle.trim() || !newStory.trim()) return;
 
-    const chosenImageUrl = customPhotoUrl.trim() || selectedPresetImg.url;
+    const finalPhotos = customPhotoUrls.length > 0
+      ? customPhotoUrls
+      : (customPhotoUrl.trim() ? [customPhotoUrl.trim()] : [selectedPresetImg.url]);
 
     const created: MemoryMoment = {
       id: `mem-${Date.now()}`,
       title: newTitle.trim(),
       category: newCategory,
       region: 'Assam',
-      imageUrl: chosenImageUrl,
+      imageUrl: finalPhotos[0],
+      imageUrls: finalPhotos,
       imageAlt: newTitle.trim(),
       dateLabel: newDate.trim() || 'Cherished Memory',
       story: newStory.trim(),
@@ -130,6 +144,7 @@ export const PatientMemories: React.FC<PatientMemoriesProps> = ({
       onAddMemory(created);
     }
     setSelectedMemory(created);
+    setActivePhotoIndex(0);
     setIsAddModalOpen(false);
     VoiceService.speak('Your memory has been added to your album.', lang);
 
@@ -138,6 +153,7 @@ export const PatientMemories: React.FC<PatientMemoriesProps> = ({
     setNewStory('');
     setNewDate('');
     setCustomPhotoUrl('');
+    setCustomPhotoUrls([]);
   };
 
   return (
@@ -172,25 +188,68 @@ export const PatientMemories: React.FC<PatientMemoriesProps> = ({
       <div className="rounded-3xl bg-white border border-stone-200 overflow-hidden shadow-sm">
         <div className="grid grid-cols-1 lg:grid-cols-12">
           {/* Large Image Showcase (TRD 19: Large images, avoid dense thumbnails) */}
-          <div className="lg:col-span-6 relative bg-stone-900 min-h-[320px] sm:min-h-[420px] flex items-center justify-center">
-            <img
-              src={selectedMemory.imageUrl}
-              alt={selectedMemory.imageAlt}
-              className="w-full h-full object-cover max-h-[500px]"
-              referrerPolicy="no-referrer"
-            />
-            <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent flex items-end p-6">
-              <div className="text-white space-y-1">
-                <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-teal-800/90 text-amber-200 text-xs font-semibold">
-                  <Heart className="w-3.5 h-3.5 fill-current text-amber-300" />
-                  {selectedMemory.category}
-                </span>
-                <h3 className="text-xl sm:text-2xl font-bold font-serif-heading text-white">
-                  {selectedMemory.title}
-                </h3>
+          {(() => {
+            const currentPhotos = (selectedMemory.imageUrls && selectedMemory.imageUrls.length > 0)
+              ? selectedMemory.imageUrls
+              : [selectedMemory.imageUrl];
+            const displayPhoto = currentPhotos[activePhotoIndex] || currentPhotos[0] || selectedMemory.imageUrl;
+
+            return (
+              <div className="lg:col-span-6 relative bg-stone-900 min-h-[320px] sm:min-h-[420px] flex flex-col justify-end">
+                <img
+                  src={displayPhoto}
+                  alt={selectedMemory.imageAlt}
+                  className="absolute inset-0 w-full h-full object-cover"
+                  referrerPolicy="no-referrer"
+                />
+                
+                {/* Photo Count and Gallery Thumbnails */}
+                {currentPhotos.length > 1 && (
+                  <div className="relative z-10 px-6 pb-2 flex items-center gap-2 overflow-x-auto">
+                    {currentPhotos.map((url, idx) => (
+                      <button
+                        key={idx}
+                        type="button"
+                        onClick={() => setActivePhotoIndex(idx)}
+                        className={`h-12 w-16 rounded-xl overflow-hidden border-2 transition shrink-0 ${
+                          activePhotoIndex === idx
+                            ? 'border-amber-400 scale-105 shadow-md'
+                            : 'border-white/60 opacity-70 hover:opacity-100'
+                        }`}
+                        title={`View photo ${idx + 1}`}
+                      >
+                        <img
+                          src={url}
+                          alt={`Thumbnail ${idx + 1}`}
+                          className="w-full h-full object-cover"
+                          referrerPolicy="no-referrer"
+                        />
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                <div className="relative z-10 bg-gradient-to-t from-black/80 via-black/40 to-transparent p-6 pt-10">
+                  <div className="text-white space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-teal-800/90 text-amber-200 text-xs font-semibold">
+                        <Heart className="w-3.5 h-3.5 fill-current text-amber-300" />
+                        {selectedMemory.category}
+                      </span>
+                      {currentPhotos.length > 1 && (
+                        <span className="px-2.5 py-0.5 rounded-full bg-stone-900/80 text-white text-[11px] font-medium border border-white/20">
+                          {activePhotoIndex + 1} of {currentPhotos.length} Photos
+                        </span>
+                      )}
+                    </div>
+                    <h3 className="text-xl sm:text-2xl font-bold font-serif-heading text-white">
+                      {selectedMemory.title}
+                    </h3>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+            );
+          })()}
 
           {/* Memory Story & Interactive Gentle Reflection */}
           <div className="lg:col-span-6 p-6 sm:p-8 flex flex-col justify-between space-y-6">

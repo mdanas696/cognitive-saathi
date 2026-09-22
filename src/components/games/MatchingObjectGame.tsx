@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Volume2, Sparkles, CheckCircle2, RefreshCw, ShieldCheck, Heart } from 'lucide-react';
 import { LanguageCode } from '../../types';
 import { VoiceService } from '../../lib/voiceService';
+import { translations } from '../../lib/i18n';
 import { AudioInstructionBanner } from '../common/AudioInstructionBanner';
 
 interface MatchingObjectGameProps {
@@ -110,9 +111,11 @@ export const MatchingObjectGame: React.FC<MatchingObjectGameProps> = ({
     setSelectedChoice(idx);
     setTotalAttempts((a) => a + 1);
 
+    const t = translations[lang] || translations.en;
+
     if (isCorrect) {
       setIsSuccessFeedback(true);
-      VoiceService.speak('Well done! That matches nicely.', lang);
+      VoiceService.speak(t.instructionWellDone || 'Well done! That matches nicely.', lang);
 
       const nextConsecutiveCorrect = consecutiveCorrect + 1;
       setConsecutiveCorrect(nextConsecutiveCorrect);
@@ -151,7 +154,7 @@ export const MatchingObjectGame: React.FC<MatchingObjectGameProps> = ({
         setChoicesCount(2);
         VoiceService.speak(`Take your time. Let's look for the ${currentRound.targetName.split(' ')[0]} together.`, lang);
       } else {
-        VoiceService.speak('Take your time, let us try again gently.', lang);
+        VoiceService.speak(t.instructionTryAgain || 'Take your time, let us try again gently.', lang);
       }
 
       setTimeout(() => {

@@ -696,6 +696,13 @@ export const translations: Record<LanguageCode, Translations> = {
 };
 
 /**
+ * Safe translation getter that falls back to English
+ */
+export function getTranslation(lang: LanguageCode): Translations {
+  return translations[lang] || translations.en;
+}
+
+/**
  * Universal Game Localizer
  * Ensures game title, description, cultural tag, and category match the active language.
  */

@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Play, Clock, Sparkles, Grid, Eye, CalendarCheck, Smile, HelpCircle } from 'lucide-react';
 import { GameDefinition, LanguageCode } from '../../types';
 import { translations, getGameTranslation } from '../../lib/i18n';
+import { OfflineStore } from '../../lib/offlineStore';
 
 interface PatientActivitiesProps {
   games: GameDefinition[];
@@ -15,6 +16,49 @@ export const PatientActivities: React.FC<PatientActivitiesProps> = ({
   onSelectGame,
 }) => {
   const t = translations[lang] || translations.en;
+
+  const [customExercises, setCustomExercises] = useState<GameDefinition[]>(() => {
+    try {
+      const pId = OfflineStore.getActivePatientId();
+      return pId ? OfflineStore.getCustomGames(pId) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    const pId = OfflineStore.getActivePatientId();
+    if (!pId) return;
+    fetch(`/api/patients/${pId}/exercises`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((serverExercises: GameDefinition[]) => {
+        if (Array.isArray(serverExercises) && serverExercises.length > 0) {
+          setCustomExercises((prev) => {
+            const combined = [...serverExercises, ...prev];
+            const seen = new Set<string>();
+            const deduped = combined.filter((g) => {
+              if (!g || !g.id || seen.has(g.id)) return false;
+              seen.add(g.id);
+              return true;
+            });
+            OfflineStore.saveCustomGames(deduped, pId);
+            return deduped;
+          });
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Deduplicate all games by game.id
+  const allUniqueGames = (() => {
+    const combined = [...games, ...customExercises];
+    const seen = new Set<string>();
+    return combined.filter((g) => {
+      if (!g || !g.id || seen.has(g.id)) return false;
+      seen.add(g.id);
+      return true;
+    });
+  })();
 
   const getGameIcon = (iconName: string) => {
     switch (iconName) {
@@ -51,7 +95,7 @@ export const PatientActivities: React.FC<PatientActivitiesProps> = ({
 
       {/* Activity Card Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        {games.map((game) => {
+        {allUniqueGames.map((game) => {
           const localized = getGameTranslation(game.id, lang);
 
           return (

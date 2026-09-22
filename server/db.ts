@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import { PatientProfile, CaretakerProfile, RoutineTask, ReminderItem, MemoryMoment, GameSessionResult } from '../src/types';
+import { PatientProfile, CaretakerProfile, RoutineTask, ReminderItem, MemoryMoment, GameSessionResult, GameDefinition } from '../src/types';
 
 export interface DatabaseSchema {
   patients: PatientProfile[];
@@ -403,18 +403,16 @@ export class ServerDB {
     initiatorName?: string
   ): { success: boolean; patients: PatientProfile[] } {
     const db = this.ensureDbExists();
-    const patient = db.patients.find((p) => p.id === patientId);
-    if (patient) {
-      patient.linkedCaregiverKey = '';
-      patient.hasCaregiver = false;
-      patient.caregiverName = 'Self';
-      patient.caregiverPhone = '';
-      patient.caregiverRemovalNotice = {
-        caregiverName: initiatorName || 'Your Caregiver',
-        removedAt: new Date().toISOString(),
-        message: `Your caregiver ${initiatorName ? initiatorName + ' ' : ''}has removed you from their care circle. You are now in self-care mode.`,
-      };
-    }
+
+    // Completely remove patient from database
+    db.patients = db.patients.filter((p) => p.id !== patientId);
+
+    // Clean up patient specific associated data
+    if (db.routines) delete db.routines[patientId];
+    if (db.reminders) delete db.reminders[patientId];
+    if (db.memories) delete db.memories[patientId];
+    if (db.sessions) delete db.sessions[patientId];
+    if ((db as any).exercises) delete (db as any).exercises[patientId];
 
     for (const ct of db.caretakers) {
       if (ct.assignedPatientIds) {
@@ -510,5 +508,25 @@ export class ServerDB {
     db.sessions[patientId] = [session, ...db.sessions[patientId].filter((s) => s.id !== session.id)];
     this.save(db);
     return db.sessions[patientId];
+  }
+
+  static getExercises(patientId: string): GameDefinition[] {
+    const db = this.ensureDbExists();
+    if (!(db as any).exercises) (db as any).exercises = {};
+    return (db as any).exercises[patientId] || [];
+  }
+
+  static addExercise(patientId: string, exercise: GameDefinition): GameDefinition[] {
+    const db = this.ensureDbExists();
+    if (!(db as any).exercises) (db as any).exercises = {};
+    if (!(db as any).exercises[patientId]) {
+      (db as any).exercises[patientId] = [];
+    }
+    (db as any).exercises[patientId] = [
+      exercise,
+      ...(db as any).exercises[patientId].filter((e: any) => e.id !== exercise.id),
+    ];
+    this.save(db);
+    return (db as any).exercises[patientId];
   }
 }
